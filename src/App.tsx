@@ -119,7 +119,7 @@ function App() {
     return (data?.opportunities ?? []).filter((item) => (!onlyExecutable || item.executable) && (!needle || item.symbol.includes(needle)));
   }, [data, onlyExecutable, search]);
   const readyCount = data?.opportunities.filter((item) => item.executable).length ?? 0;
-  const best = data?.opportunities[0];
+  const best = data?.opportunities.find((item) => item.executable);
   const healthy = data?.health.filter((item) => item.ok).length ?? 0;
   void lastTick;
 
@@ -144,7 +144,7 @@ function App() {
           <div className="hero-metric">
             <span>当前最优成本后年化</span>
             <strong>{best ? pct(best.expectedNetApr, 1) : "—"}</strong>
-            <div>{best ? `${best.symbol} · ${best.longExchange} 多 / ${best.shortExchange} 空` : "等待数据"}</div>
+            <div>{best ? `${best.symbol} · ${best.longExchange} 多 / ${best.shortExchange} 空` : data ? "暂无满足全部门槛的机会" : "等待数据"}</div>
             <small>按持有 {filters.periods} 个 8h 周期估算，不构成收益承诺</small>
           </div>
         </section>
