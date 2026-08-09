@@ -2,7 +2,7 @@ import { buildOpportunities } from "../src/lib/funding";
 import type { ScanParameters, ScanResponse } from "../src/lib/types";
 import { handleControlPlane } from "./control-plane";
 import { fetchAllExchanges } from "./exchanges";
-import { HttpError, isAdmin, json } from "./http";
+import { HttpError, json } from "./http";
 import { handleTrading } from "./trading";
 
 const DEFAULTS: ScanParameters = {
@@ -72,7 +72,6 @@ export default {
     try {
       if (url.pathname === "/api/health") return json({ ok: true, service: "fundarb-web", tradingControlPlane: true, relayConfigured: Boolean(env.EXECUTION_RELAY_URL), now: Date.now() });
       if (url.pathname === "/api/scan") return scan(request);
-      if (url.pathname.startsWith("/api/admin/") && !isAdmin(request, env)) return json({ error: "管理凭证无效" }, 401);
       if (url.pathname.startsWith("/api/admin/hedges")) return handleTrading(request, env, url.pathname);
       if (url.pathname.startsWith("/api/admin/")) return handleControlPlane(request, env, url.pathname);
       if (url.pathname.startsWith("/api/")) return json({ error: "Not found" }, 404);

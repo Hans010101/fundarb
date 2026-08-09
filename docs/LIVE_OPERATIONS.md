@@ -6,7 +6,8 @@
 
 ## 凭证边界
 
-- `ADMIN_API_TOKEN`：个人控制台管理凭证，只存 Cloudflare Secret；本机副本存 macOS 钥匙串。
+- Cloudflare Access：个人控制台的主登录方式，仅放行 `hans.pan007@gmail.com`；Worker 还会验证 JWT 签名、团队域名、应用受众与邮箱。
+- `ADMIN_API_TOKEN`：只作无界面的应急恢复凭证，前端不再显示输入框；只存 Cloudflare Secret，本机副本存 macOS 钥匙串。
 - `CREDENTIAL_MASTER_KEY`：交易所 API 密文的 AES-256-GCM 主密钥，只存 Cloudflare Secret，不保留本机副本。
 - `EXECUTION_RELAY_TOKEN`：Worker 与固定出口中继之间的共享凭证，只存 Cloudflare Secret和固定主机的环境变量；本机副本存 macOS 钥匙串。
 - 交易所 API Key/Secret：浏览器提交后由 Worker 加密写入 D1，接口永不回显明文。

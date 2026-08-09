@@ -1,6 +1,6 @@
 import type { ControlPlaneStatus, ExecutionMode } from "../src/lib/admin-types";
 import { SUPPORTED_EXCHANGES, type DecryptedConnection, type TradingEnvironment, type TradingExchange, signVerification } from "./connectors";
-import { HttpError, json, readJson, requireAdmin } from "./http";
+import { HttpError, json, readJson, requireAdmin, type AdminIdentity } from "./http";
 import { credentialFingerprint, decryptCredential, encryptCredential } from "./vault";
 
 interface ConnectionRow {
@@ -84,7 +84,7 @@ async function audit(env: Env, eventType: string, severity: string, payload: unk
     .bind(crypto.randomUUID(), eventType, severity, JSON.stringify(payload), Date.now()).run();
 }
 
-async function status(env: Env): Promise<Response> {
+async function status(env: Env, identity: AdminIdentity): Promise<Response> {
   const [settings, connections, hedges] = await Promise.all([
     settingsMap(env.DB),
     env.DB.prepare("SELECT * FROM exchange_connections ORDER BY created_at DESC").all<ConnectionRow>(),
@@ -92,6 +92,8 @@ async function status(env: Env): Promise<Response> {
   ]);
   const body: ControlPlaneStatus = {
     authenticated: true,
+    identityEmail: identity.email,
+    authenticationMethod: identity.method,
     relayConfigured: Boolean(env.EXECUTION_RELAY_URL),
     settings: {
       mode: (settings.get("mode") ?? "paper") as ExecutionMode,
@@ -191,8 +193,8 @@ async function updateSettings(request: Request, env: Env): Promise<Response> {
 }
 
 export async function handleControlPlane(request: Request, env: Env, pathname: string): Promise<Response> {
-  requireAdmin(request, env);
-  if (request.method === "GET" && pathname === "/api/admin/status") return status(env);
+  const identity = await requireAdmin(request, env);
+  if (request.method === "GET" && pathname === "/api/admin/status") return status(env, identity);
   if (request.method === "POST" && pathname === "/api/admin/connections") return saveConnection(request, env);
   if (request.method === "PATCH" && /^\/api\/admin\/connections\/[^/]+$/.test(pathname)) return updateConnection(request, env, pathname.split("/").at(-1)!);
   if (request.method === "POST" && /^\/api\/admin\/connections\/[^/]+\/verify$/.test(pathname)) return verifyConnection(env, pathname.split("/").at(-2)!);

@@ -1,3 +1,12 @@
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+export interface AdminIdentity {
+  email: string;
+  method: "cloudflare-access" | "recovery-token";
+}
+
+type AuthEnv = Pick<Env, "TEAM_DOMAIN" | "POLICY_AUD" | "AUTHORIZED_EMAIL" | "ADMIN_API_TOKEN">;
+
 export function json(data: unknown, status = 200, cache = "no-store"): Response {
   return Response.json(data, {
     status,
@@ -33,14 +42,36 @@ function constantTimeEqual(left: string, right: string): boolean {
   return different === 0;
 }
 
-export function isAdmin(request: Request, env: Env): boolean {
-  const authorization = request.headers.get("authorization") ?? "";
-  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  return Boolean(token && constantTimeEqual(token, env.ADMIN_API_TOKEN));
+async function accessIdentity(request: Request, env: AuthEnv): Promise<AdminIdentity | null> {
+  const teamDomain = env.TEAM_DOMAIN as string;
+  const audience = env.POLICY_AUD as string;
+  const authorizedEmail = (env.AUTHORIZED_EMAIL as string).trim().toLowerCase();
+  const token = request.headers.get("cf-access-jwt-assertion") ?? "";
+  if (!teamDomain || !audience || !authorizedEmail || !token) return null;
+  try {
+    const jwks = createRemoteJWKSet(new URL(`${teamDomain.replace(/\/$/, "")}/cdn-cgi/access/certs`));
+    const { payload } = await jwtVerify(token, jwks, { issuer: teamDomain.replace(/\/$/, ""), audience });
+    const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+    return email === authorizedEmail ? { email, method: "cloudflare-access" } : null;
+  } catch {
+    return null;
+  }
 }
 
-export function requireAdmin(request: Request, env: Env): void {
-  if (!isAdmin(request, env)) throw new HttpError(401, "管理凭证无效");
+export async function authenticateAdmin(request: Request, env: AuthEnv): Promise<AdminIdentity | null> {
+  const access = await accessIdentity(request, env);
+  if (access) return access;
+  const authorization = request.headers.get("authorization") ?? "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  return token && constantTimeEqual(token, env.ADMIN_API_TOKEN)
+    ? { email: "recovery@local", method: "recovery-token" }
+    : null;
+}
+
+export async function requireAdmin(request: Request, env: AuthEnv): Promise<AdminIdentity> {
+  const identity = await authenticateAdmin(request, env);
+  if (!identity) throw new HttpError(401, "请使用已授权的 Google 邮箱登录");
+  return identity;
 }
 
 export class HttpError extends Error {

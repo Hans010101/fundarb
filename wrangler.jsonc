@@ -12,7 +12,10 @@
   },
   "vars": {
     "ENVIRONMENT": "production",
-    "EXECUTION_RELAY_URL": ""
+    "EXECUTION_RELAY_URL": "",
+    "AUTHORIZED_EMAIL": "hans.pan007@gmail.com",
+    "POLICY_AUD": "d05a2be4ac42ec1e71b9dff98a71ed024eb9f56f670f8b2dc52b8f4324b2956c",
+    "TEAM_DOMAIN": "https://hans-pan007.cloudflareaccess.com"
   },
   "secrets": {
     "required": ["ADMIN_API_TOKEN", "CREDENTIAL_MASTER_KEY", "EXECUTION_RELAY_TOKEN"]

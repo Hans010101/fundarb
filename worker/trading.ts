@@ -119,7 +119,7 @@ async function paperOpen(env: Env, hedgeId: string, body: OpenHedgeBody): Promis
 }
 
 async function openHedge(request: Request, env: Env): Promise<Response> {
-  requireAdmin(request, env);
+  await requireAdmin(request, env);
   const body = await readJson<OpenHedgeBody>(request);
   const mode = (await settingsMap(env.DB).then((settings) => settings.get("mode") ?? "paper")) as ExecutionMode;
   await validateExecution(env, mode, body.notionalUsd, body.confirmation, body.liveConfirmation);
@@ -173,7 +173,7 @@ async function openHedge(request: Request, env: Env): Promise<Response> {
 }
 
 async function closeHedge(request: Request, env: Env, hedgeId: string): Promise<Response> {
-  requireAdmin(request, env);
+  await requireAdmin(request, env);
   const body = await readJson<{ confirmation: string; liveConfirmation?: string }>(request);
   const row = await env.DB.prepare("SELECT * FROM hedge_intents WHERE id=?").bind(hedgeId).first<HedgeRow>();
   if (!row) throw new HttpError(404, "套保头寸不存在");

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowDownLeft, ArrowUpRight, Cable, CheckCircle2, CircleDollarSign,
-  Database, KeyRound, LockKeyhole, LogOut, OctagonX, Plus, RefreshCw, Settings2, ShieldAlert,
+  Database, KeyRound, LogOut, OctagonX, Plus, RefreshCw, Settings2, ShieldAlert,
   ShieldCheck, SlidersHorizontal, Unplug, WalletCards, XCircle,
 } from "lucide-react";
 import type { ControlPlaneStatus, ExecutionMode, HedgeRecord, TradingConnection } from "./lib/admin-types";
@@ -65,8 +65,8 @@ function OpportunityTable({ data, onTrade }: { data: ScanResponse | null; onTrad
   );
 }
 
-function OperatorLock({ token, setToken, onUnlock, busy, error }: { token: string; setToken: (value: string) => void; onUnlock: () => void; busy: boolean; error: string }) {
-  return <section className="unlock-card"><div className="unlock-icon"><LockKeyhole size={30} /></div><div><p className="kicker">个人控制台</p><h2>解锁交易管理功能</h2><p>管理凭证只保存在当前浏览器会话。交易所 API 将在 Worker 内加密后写入 Cloudflare D1，页面不会回显密钥。</p><div className="unlock-form"><input type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder="输入个人管理凭证" onKeyDown={(event) => { if (event.key === "Enter") onUnlock(); }} /><button className="primary-button" onClick={onUnlock} disabled={busy || !token}>{busy ? "正在验证" : "解锁控制台"}</button></div>{error && <p className="form-error">{error}</p>}</div></section>;
+function AccessGate({ error }: { error: string }) {
+  return <section className="unlock-card"><div className="unlock-icon"><KeyRound size={30} /></div><div><p className="kicker">Cloudflare Access</p><h2>使用 Google 邮箱登录</h2><p>控制台仅允许 <strong>hans.pan007@gmail.com</strong>。Cloudflare 会向该 Gmail 发送一次性验证码；应用还会验证 Access JWT、应用受众和邮箱，无法通过伪造请求头登录。</p><div className="access-actions"><button className="primary-button" onClick={() => window.location.reload()}>重新验证登录</button><span>无需再复制管理 Token</span></div>{error && <p className="form-error">{error}</p>}</div></section>;
 }
 
 function ConnectionsView({ status, request, refresh }: { status: ControlPlaneStatus; request: (path: string, init?: RequestInit) => Promise<unknown>; refresh: () => Promise<void> }) {
@@ -140,9 +140,9 @@ function Overview({ data, status, setView }: { data: ScanResponse | null; status
   const best = data?.opportunities.find((item) => item.executable);
   const ready = data?.opportunities.filter((item) => item.executable).length ?? 0;
   return <><section className="overview-hero"><div><p className="kicker">个人跨所套保终端</p><h1>扫描费率，<br /><em>执行双腿交易。</em></h1><p>统一管理交易所账户、资金费率机会、双腿委托、持仓和平仓。每一次真实订单都经过账户隔离、名义上限、幂等键、紧急停止和固定 IP 中继。</p><div className="hero-actions"><button className="primary-button" onClick={() => setView("opportunities")}>查看套利机会</button><button className="text-button" onClick={() => setView("trade")}>进入双腿交易 →</button></div></div><aside><p>当前最优达标机会</p><strong>{best ? pct(best.expectedNetApr, 1) : "—"}</strong><span>{best ? `${best.symbol} · ${EXCHANGE_CN[best.longExchange]}多 / ${EXCHANGE_CN[best.shortExchange]}空` : "暂无同时满足收益与流动性门槛的机会"}</span><small>成本后估算，不构成收益承诺</small></aside></section>
-    <section className="metric-grid"><article><Activity /><span>达标机会</span><strong>{ready}</strong><small>实时成本模型</small></article><article><Database /><span>共同交易对</span><strong>{data?.commonSymbolCount ?? "—"}</strong><small>至少覆盖两个平台</small></article><article><Cable /><span>已启用账户</span><strong>{status?.connections.filter((item) => item.enabled).length ?? "—"}</strong><small>加密连接</small></article><article><ShieldCheck /><span>当前模式</span><strong className="mode-text">{status ? <ModeBadge mode={status.settings.mode} /> : "未解锁"}</strong><small>{status?.settings.executionEmergencyStop === false ? "交易链路待命" : "紧急停止保护中"}</small></article></section>
+    <section className="metric-grid"><article><Activity /><span>达标机会</span><strong>{ready}</strong><small>实时成本模型</small></article><article><Database /><span>共同交易对</span><strong>{data?.commonSymbolCount ?? "—"}</strong><small>至少覆盖两个平台</small></article><article><Cable /><span>已启用账户</span><strong>{status?.connections.filter((item) => item.enabled).length ?? "—"}</strong><small>加密连接</small></article><article><ShieldCheck /><span>当前模式</span><strong className="mode-text">{status ? <ModeBadge mode={status.settings.mode} /> : "验证中"}</strong><small>{status?.settings.executionEmergencyStop === false ? "交易链路待命" : "紧急停止保护中"}</small></article></section>
     <section className="workflow-section"><div className="section-title"><p className="kicker">完整工作流</p><h2>从机会发现到双腿退出</h2></div><div className="workflow-line"><article><b>01</b><h3>连接账户</h3><p>子账户 API 加密保存在 Cloudflare，禁提现并绑定固定出口 IP。</p></article><article><b>02</b><h3>筛选机会</h3><p>归一化费率、手续费、滑点、回本周期和双边流动性。</p></article><article><b>03</b><h3>双腿执行</h3><p>难腿优先，持久化幂等订单，第二腿失败自动发起回滚。</p></article><article><b>04</b><h3>监控与退出</h3><p>跟踪净 Delta、保证金、费率反转，并用 reduce-only 双腿平仓。</p></article></div></section>
-    <section className="dashboard-lower"><div className="panel compact"><div className="panel-heading"><div><p className="kicker">数据连接</p><h2>交易所状态</h2></div></div><div className="source-grid">{data?.health.map((item) => <div key={item.exchange}><ExchangeBadge name={item.exchange} /><span>{EXCHANGE_CN[item.exchange]}</span><b className={item.ok ? "success-text" : "danger-text"}>{item.ok ? `${item.quoteCount} 对` : "不可用"}</b></div>)}</div></div><div className="panel compact risk-summary"><div><p className="kicker">安全状态</p><h2>{status ? (status.settings.executionEmergencyStop ? "真实委托已停止" : "真实委托链路待命") : "交易控制台未解锁"}</h2><p>{status ? `当前为 ${status.settings.mode.toUpperCase()} 模式；固定 IP 中继${status.relayConfigured ? "已配置" : "未配置"}。` : "解锁后可查看账户连接、执行总闸和套保持仓。"}</p></div><button className="outline-button" onClick={() => setView(status ? "risk" : "connections")}>查看安全设置</button></div></section></>;
+    <section className="dashboard-lower"><div className="panel compact"><div className="panel-heading"><div><p className="kicker">数据连接</p><h2>交易所状态</h2></div></div><div className="source-grid">{data?.health.map((item) => <div key={item.exchange}><ExchangeBadge name={item.exchange} /><span>{EXCHANGE_CN[item.exchange]}</span><b className={item.ok ? "success-text" : "danger-text"}>{item.ok ? `${item.quoteCount} 对` : "不可用"}</b></div>)}</div></div><div className="panel compact risk-summary"><div><p className="kicker">安全状态</p><h2>{status ? (status.settings.executionEmergencyStop ? "真实委托已停止" : "真实委托链路待命") : "正在验证交易身份"}</h2><p>{status ? `当前为 ${status.settings.mode.toUpperCase()} 模式；固定 IP 中继${status.relayConfigured ? "已配置" : "未配置"}。` : "Cloudflare 邮箱身份验证完成后即可管理账户、执行总闸和套保持仓。"}</p></div><button className="outline-button" onClick={() => setView(status ? "risk" : "connections")}>查看安全设置</button></div></section></>;
 }
 
 export default function App() {
@@ -152,9 +152,7 @@ export default function App() {
   const [publicError, setPublicError] = useState("");
   const [filters, setFilters] = useState(DEFAULT_QUERY);
   const [draft, setDraft] = useState(DEFAULT_QUERY);
-  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("fundarb-admin-token") ?? "");
   const [status, setStatus] = useState<ControlPlaneStatus | null>(null);
-  const [unlocking, setUnlocking] = useState(false);
   const [adminError, setAdminError] = useState("");
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
 
@@ -164,27 +162,27 @@ export default function App() {
     try { const response = await fetch(`/api/scan?${params}`); if (!response.ok && response.status !== 503) throw new Error(`扫描服务返回 ${response.status}`); setData(await response.json() as ScanResponse); } catch (cause) { setPublicError(cause instanceof Error ? cause.message : "行情扫描暂不可用"); } finally { setLoading(false); }
   }, [filters]);
   const adminRequest = useCallback(async (path: string, init: RequestInit = {}) => {
-    const response = await fetch(path, { ...init, headers: { authorization: `Bearer ${adminToken}`, "content-type": "application/json", ...init.headers } });
-    const body = await response.json() as { error?: string };
+    const response = await fetch(path, { ...init, credentials: "same-origin", headers: { "content-type": "application/json", ...init.headers } });
+    const contentType = response.headers.get("content-type") ?? "";
+    const body = contentType.includes("application/json") ? await response.json() as { error?: string } : { error: "Cloudflare Access 登录会话无效" };
     if (!response.ok) throw new Error(body.error ?? `请求失败：${response.status}`);
     return body;
-  }, [adminToken]);
-  const refreshStatus = useCallback(async () => { if (!adminToken) return; setStatus(await adminRequest("/api/admin/status") as ControlPlaneStatus); }, [adminRequest, adminToken]);
-  async function unlock() { setUnlocking(true); setAdminError(""); try { const next = await adminRequest("/api/admin/status") as ControlPlaneStatus; sessionStorage.setItem("fundarb-admin-token", adminToken); setStatus(next); } catch (cause) { setAdminError(cause instanceof Error ? cause.message : "解锁失败"); } finally { setUnlocking(false); } }
-  function logout() { sessionStorage.removeItem("fundarb-admin-token"); setAdminToken(""); setStatus(null); setView("overview"); }
+  }, []);
+  const refreshStatus = useCallback(async () => { setStatus(await adminRequest("/api/admin/status") as ControlPlaneStatus); setAdminError(""); }, [adminRequest]);
+  function logout() { window.location.assign("/cdn-cgi/access/logout"); }
 
   useEffect(() => { void loadScan(); }, [loadScan]);
-  useEffect(() => { if (adminToken) void refreshStatus().catch(() => { sessionStorage.removeItem("fundarb-admin-token"); setStatus(null); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refreshStatus().catch((cause) => { setStatus(null); setAdminError(cause instanceof Error ? cause.message : "Google 邮箱登录会话无效"); }); }, [refreshStatus]);
   useEffect(() => { const timer = window.setInterval(() => void loadScan(), 30_000); return () => window.clearInterval(timer); }, [loadScan]);
 
   function openTrade(item: Opportunity) { setSelectedOpportunity(item); setView("trade"); window.scrollTo({ top: 0, behavior: "smooth" }); }
   const protectedView = view === "trade" || view === "connections" || view === "risk";
 
-  return <div className="app-shell"><a className="skip-link" href="#main">跳到主要内容</a><header><div className="header-inner"><button className="brand" onClick={() => setView("overview")}><span className="brand-seal">套</span><span><strong>FundArb</strong><small>跨所套保交易终端</small></span></button><nav>{[["overview", "总览"], ["opportunities", "套利机会"], ["trade", "双腿交易"], ["connections", "账户连接"], ["risk", "风控中心"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key as View)}>{label}</button>)}</nav><div className="header-tools"><span className={`market-state ${data?.health.some((item) => item.ok) ? "online" : ""}`}><i />{data?.health.filter((item) => item.ok).length ?? 0}/5 数据源</span><button className="icon-button" aria-label="刷新" onClick={() => void loadScan()}><RefreshCw size={19} className={loading ? "spin" : ""} /></button>{status ? <button className="operator-button" onClick={logout}><LogOut size={17} />退出管理</button> : <button className="operator-button" onClick={() => setView("connections")}><KeyRound size={17} />个人管理</button>}</div></div></header>
+  return <div className="app-shell"><a className="skip-link" href="#main">跳到主要内容</a><header><div className="header-inner"><button className="brand" onClick={() => setView("overview")}><span className="brand-seal">套</span><span><strong>FundArb</strong><small>跨所套保交易终端</small></span></button><nav>{[["overview", "总览"], ["opportunities", "套利机会"], ["trade", "双腿交易"], ["connections", "账户连接"], ["risk", "风控中心"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key as View)}>{label}</button>)}</nav><div className="header-tools"><span className={`market-state ${data?.health.some((item) => item.ok) ? "online" : ""}`}><i />{data?.health.filter((item) => item.ok).length ?? 0}/5 数据源</span><button className="icon-button" aria-label="刷新" onClick={() => void loadScan()}><RefreshCw size={19} className={loading ? "spin" : ""} /></button>{status ? <button className="operator-button" onClick={logout} title={status.identityEmail}><LogOut size={17} />{status.authenticationMethod === "cloudflare-access" ? "退出邮箱登录" : "退出应急会话"}</button> : <button className="operator-button" onClick={() => setView("connections")}><KeyRound size={17} />Google 邮箱登录</button>}</div></div></header>
     <main id="main" className="main-container">{publicError && <div className="banner danger"><XCircle size={20} />{publicError}</div>}
       {view === "overview" && <Overview data={data} status={status} setView={setView} />}
       {view === "opportunities" && <><div className="page-heading"><div><p className="kicker">资金费率扫描</p><h1>套利机会</h1><p>观察值不是下单指令。进入交易前还需核对盘口深度、账户余额与保证金安全垫。</p></div><button className="icon-button large" onClick={() => void loadScan()}><RefreshCw size={21} className={loading ? "spin" : ""} /></button></div><section className="filter-panel"><div><SlidersHorizontal size={20} /><strong>收益假设</strong></div><label>单腿手续费 <b>{draft.feeBps} bp</b><input type="range" min="0" max="15" step="0.5" value={draft.feeBps} onChange={(e) => setDraft({ ...draft, feeBps: Number(e.target.value) })} /></label><label>单腿滑点 <b>{draft.slippageBps} bp</b><input type="range" min="0" max="20" step="0.5" value={draft.slippageBps} onChange={(e) => setDraft({ ...draft, slippageBps: Number(e.target.value) })} /></label><label>计划持有 <b>{draft.periods} 期</b><input type="range" min="3" max="90" step="3" value={draft.periods} onChange={(e) => setDraft({ ...draft, periods: Number(e.target.value) })} /></label><label>最低净 APR <b>{draft.minApr}%</b><input type="range" min="0" max="50" value={draft.minApr} onChange={(e) => setDraft({ ...draft, minApr: Number(e.target.value) })} /></label><button className="primary-button" onClick={() => setFilters(draft)}>重新计算</button></section><OpportunityTable data={data} onTrade={openTrade} /></>}
-      {protectedView && !status && <OperatorLock token={adminToken} setToken={setAdminToken} onUnlock={() => void unlock()} busy={unlocking} error={adminError} />}
+      {protectedView && !status && <AccessGate error={adminError} />}
       {view === "connections" && status && <ConnectionsView status={status} request={adminRequest} refresh={refreshStatus} />}
       {view === "trade" && status && <TradeView status={status} selected={selectedOpportunity} request={adminRequest} refresh={refreshStatus} />}
       {view === "risk" && status && <RiskView status={status} request={adminRequest} refresh={refreshStatus} />}

@@ -33,6 +33,8 @@ export interface HedgeRecord {
 
 export interface ControlPlaneStatus {
   authenticated: true;
+  identityEmail: string;
+  authenticationMethod: "cloudflare-access" | "recovery-token";
   relayConfigured: boolean;
   settings: {
     mode: ExecutionMode;

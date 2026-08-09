@@ -41,7 +41,7 @@ npm run deploy
 - `GET /api/health`：服务状态与执行总闸。
 - `GET /api/scan`：实时机会矩阵。
 - 查询参数：`feeBps`、`slippageBps`、`periods`、`maxPeriods`、`minApr`、`minVolume`。
-- `GET /api/admin/status`：账户、模式、总闸与套保任务（需管理 Bearer 凭证）。
+- `GET /api/admin/status`：账户、模式、总闸与套保任务（需通过 Cloudflare Access 邮箱身份校验）。
 - `POST /api/admin/connections`：加密保存交易所 API 凭证。
 - `POST /api/admin/connections/:id/verify`：经固定 IP 中继执行账户验权。
 - `POST /api/admin/hedges`：创建 Paper/Testnet/Live 双腿委托。
@@ -49,7 +49,7 @@ npm run deploy
 
 ## 安全边界
 
-公开仓库只保存业务代码。交易所密钥在 Worker 内使用 AES-256-GCM 加密后写入 D1；加密主密钥、管理凭证和中继凭证仅存在 Cloudflare Secret。真正访问交易所的请求必须经过 `apps/execution-relay` 固定出口中继，该中继只允许预设交易所主机、路径、方法和请求头。交易账户必须使用独立子账户、禁提现和 IP 白名单。
+公开仓库只保存业务代码。个人控制台由 Cloudflare Access 保护，Worker 会再次校验 Access JWT 的签名、签发方、应用受众及授权邮箱；`ADMIN_API_TOKEN` 仅保留作无界面的应急恢复通道。交易所密钥在 Worker 内使用 AES-256-GCM 加密后写入 D1；加密主密钥、应急管理凭证和中继凭证仅存在 Cloudflare Secret。真正访问交易所的请求必须经过 `apps/execution-relay` 固定出口中继，该中继只允许预设交易所主机、路径、方法和请求头。交易账户必须使用独立子账户、禁提现和 IP 白名单。
 
 上线顺序与中继配置见 [实盘运维手册](docs/LIVE_OPERATIONS.md)。
 
