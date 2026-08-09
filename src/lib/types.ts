@@ -1,4 +1,13 @@
-export type ExchangeName = "Binance" | "Bybit" | "OKX" | "Bitget" | "Hyperliquid";
+export type ExchangeName =
+  | "Binance"
+  | "Bybit"
+  | "OKX"
+  | "Bitget"
+  | "Hyperliquid"
+  | "Gate.io"
+  | "KuCoin"
+  | "MEXC"
+  | "Phemex";
 
 export interface FundingQuote {
   exchange: ExchangeName;
@@ -58,6 +67,8 @@ export interface ScanResponse {
   params: ScanParameters;
   opportunities: Opportunity[];
   health: ExchangeHealth[];
+  sourceCount: number;
+  healthySourceCount: number;
   quoteCount: number;
   commonSymbolCount: number;
   warnings: string[];

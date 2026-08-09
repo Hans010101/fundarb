@@ -57,4 +57,18 @@ describe("opportunity builder", () => {
     expect(result[0].executable).toBe(false);
     expect(result[0].reasons).toContain("极端费率：需历史稳定性与盘口复核");
   });
+
+  it("rejects same-ticker routes when prices indicate different assets or contract units", () => {
+    const first = makeQuote("Bybit", -0.0001);
+    const second = { ...makeQuote("MEXC", 0.0002), markPrice: 0.5 };
+    expect(buildOpportunities([first, second], params)).toHaveLength(0);
+  });
+
+  it("blocks automatic execution when cross-exchange basis is unusually wide", () => {
+    const first = makeQuote("Bybit", -0.0001);
+    const second = { ...makeQuote("MEXC", 0.0002), markPrice: 96 };
+    const [result] = buildOpportunities([first, second], params);
+    expect(result.executable).toBe(false);
+    expect(result.reasons).toContain("跨所标记价格偏差过大，禁止自动交易");
+  });
 });

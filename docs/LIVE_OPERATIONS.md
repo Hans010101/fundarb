@@ -20,7 +20,9 @@
 4. 将该固定公网 IP 加入每个交易所 API Key 的 IP 白名单。
 5. 更新 `wrangler.jsonc` 的 `EXECUTION_RELAY_URL` 后重新生成类型、测试并部署。
 
-中继不是通用代理：代码只允许 Binance、Bybit、OKX、Bitget 的账户验权与下单路径，并限制方法、请求头、请求体大小及重复 requestId。
+中继不是通用代理：代码只允许 Binance、Bybit、OKX、Bitget、Gate.io、KuCoin 的账户验权与下单路径，以及 9 家已接入交易所的指定公开行情路径，并限制方法、请求头、请求体大小及重复 requestId。Hyperliquid、MEXC、Phemex 当前只接行情，不允许经控制台保存账户或下单。
+
+Binance、Bitget 等平台可能从 Cloudflare 共享出口返回 WAF 403，KuCoin 等平台也可能返回共享 IP 429。这不应被解释为“没有行情”或“没有套利机会”。配置固定出口后，Worker 会先尝试直连，失败再经白名单中继拉取；控制台会保留每一路的真实在线状态与错误信息。
 
 ## 上线顺序
 

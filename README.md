@@ -1,6 +1,6 @@
 # FundArb
 
-个人使用的跨交易所永续合约套保交易终端。实时聚合 Binance、Bybit、OKX、Bitget 与 Hyperliquid，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。
+个人使用的跨交易所永续合约套保交易终端。实时聚合 Binance、Bybit、OKX、Bitget、Hyperliquid、Gate.io、KuCoin、MEXC 与 Phemex 共 9 路 USDT 永续行情，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。
 
 > 系统具备真实交易接口，但生产环境默认开启紧急停止，并关闭真实委托和主网许可。固定 IP 执行中继未配置前，后端会硬拒绝 Testnet/Live 请求。它不构成投资建议。
 
@@ -47,9 +47,19 @@ npm run deploy
 - `POST /api/admin/hedges`：创建 Paper/Testnet/Live 双腿委托。
 - `POST /api/admin/hedges/:id/close`：以 reduce-only 双腿平仓。
 
+## 交易所覆盖
+
+| 交易所 | 资金费行情 | 账户验权与真实委托 |
+| --- | --- | --- |
+| Binance / Bybit / OKX / Bitget | 是 | 是 |
+| Gate.io / KuCoin | 是 | 是 |
+| Hyperliquid / MEXC / Phemex | 是 | 暂未开放 |
+
+行情接口会逐路显示在线状态、合约数量与上游错误，不会用静态模拟数据掩盖故障。Cloudflare 边缘出口可能被个别交易所的 WAF 或共享 IP 限流；`EXECUTION_RELAY_URL` 配置后，行情请求会在直接访问失败时自动回退到同一个固定 IP 白名单中继。
+
 ## 安全边界
 
-公开仓库只保存业务代码。个人控制台由 Cloudflare Access 保护，Worker 会再次校验 Access JWT 的签名、签发方、应用受众及授权邮箱；`ADMIN_API_TOKEN` 仅保留作无界面的应急恢复通道。交易所密钥在 Worker 内使用 AES-256-GCM 加密后写入 D1；加密主密钥、应急管理凭证和中继凭证仅存在 Cloudflare Secret。真正访问交易所的请求必须经过 `apps/execution-relay` 固定出口中继，该中继只允许预设交易所主机、路径、方法和请求头。交易账户必须使用独立子账户、禁提现和 IP 白名单。
+公开仓库只保存业务代码。个人控制台由 Cloudflare Access 保护，Worker 会再次校验 Access JWT 的签名、签发方、应用受众及授权邮箱；`ADMIN_API_TOKEN` 仅保留作无界面的应急恢复通道。交易所密钥在 Worker 内使用 AES-256-GCM 加密后写入 D1；加密主密钥、应急管理凭证和中继凭证仅存在 Cloudflare Secret。真正的账户验权与委托请求必须经过 `apps/execution-relay` 固定出口中继，该中继只允许预设交易所主机、路径、方法和请求头。交易账户必须使用独立子账户、禁提现和 IP 白名单。公开行情优先从 Worker 直连；遇到 WAF、地域策略或共享出口限流时才使用同一中继降级。
 
 上线顺序与中继配置见 [实盘运维手册](docs/LIVE_OPERATIONS.md)。
 

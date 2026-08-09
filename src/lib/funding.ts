@@ -70,6 +70,11 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
 
         const bothPrices = longQuote.markPrice && shortQuote.markPrice;
         const averagePrice = bothPrices ? (longQuote.markPrice! + shortQuote.markPrice!) / 2 : null;
+        const basisRate = averagePrice ? (longQuote.markPrice! - shortQuote.markPrice!) / averagePrice : null;
+        // Ticker symbols are not globally unique. A very large price mismatch usually
+        // means two venues use the same code for different assets or contract units.
+        if (basisRate !== null && Math.abs(basisRate) > 0.2) continue;
+        if (basisRate !== null && Math.abs(basisRate) > 0.03) reasons.push("跨所标记价格偏差过大，禁止自动交易");
         output.push({
           rank: 0,
           symbol,
@@ -84,7 +89,7 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
           estimatedRoundTripCost: totalCost,
           longMarkPrice: longQuote.markPrice,
           shortMarkPrice: shortQuote.markPrice,
-          basisRate: averagePrice ? (longQuote.markPrice! - shortQuote.markPrice!) / averagePrice : null,
+          basisRate,
           liquidityUsd: liquidity,
           executable: reasons.length === 0,
           reasons,
@@ -98,6 +103,6 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
 
   return output
     .sort((a, b) => Number(b.executable) - Number(a.executable) || b.expectedNetApr - a.expectedNetApr)
-    .slice(0, 100)
+    .slice(0, 300)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 }

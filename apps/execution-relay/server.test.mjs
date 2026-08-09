@@ -22,3 +22,16 @@ test("rejects arbitrary proxy targets", () => {
 test("rejects unapproved headers", () => {
   assert.throws(() => validateForwardRequest({ ...valid, headers: { authorization: "secret" } }), /请求头/);
 });
+
+test("accepts Gate.io and KuCoin futures control-plane endpoints", () => {
+  const gate = validateForwardRequest({ ...valid, exchange: "Gate.io", url: "https://api.gateio.ws/api/v4/futures/usdt/orders", headers: { KEY: "key", Timestamp: "1", SIGN: "signature" } });
+  const kucoin = validateForwardRequest({ ...valid, exchange: "KuCoin", url: "https://api-futures.kucoin.com/api/v1/orders", headers: { "KC-API-KEY": "key", "KC-API-SIGN": "signature" } });
+  assert.equal(gate.target.hostname, "api.gateio.ws");
+  assert.equal(kucoin.target.hostname, "api-futures.kucoin.com");
+});
+
+test("accepts only explicitly allowlisted public market-data paths", () => {
+  const market = validateForwardRequest({ ...valid, exchange: "Binance", method: "GET", url: "https://fapi.binance.com/fapi/v1/premiumIndex", headers: { accept: "application/json" }, body: null });
+  assert.equal(market.target.pathname, "/fapi/v1/premiumIndex");
+  assert.throws(() => validateForwardRequest({ ...valid, method: "GET", url: "https://fapi.binance.com/fapi/v1/openInterest", body: null }), /白名单/);
+});

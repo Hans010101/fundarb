@@ -34,7 +34,7 @@ function parameters(url: URL): ScanParameters {
   };
 }
 
-async function scan(request: Request): Promise<Response> {
+async function scan(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const cacheKey = new Request(url.toString(), request);
   const cache = await caches.open("fundarb-market-scan");
@@ -42,7 +42,7 @@ async function scan(request: Request): Promise<Response> {
   if (cached) return cached;
 
   const params = parameters(url);
-  const { quotes, health } = await fetchAllExchanges();
+  const { quotes, health } = await fetchAllExchanges(env);
   const exchangeCounts = new Map<string, number>();
   for (const item of quotes) exchangeCounts.set(item.symbol, (exchangeCounts.get(item.symbol) ?? 0) + 1);
   const warnings = [
@@ -57,6 +57,8 @@ async function scan(request: Request): Promise<Response> {
     params,
     opportunities: buildOpportunities(quotes, params),
     health,
+    sourceCount: health.length,
+    healthySourceCount: health.filter((entry) => entry.ok).length,
     quoteCount: quotes.length,
     commonSymbolCount: [...exchangeCounts.values()].filter((count) => count >= 2).length,
     warnings,
@@ -71,7 +73,7 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/api/health") return json({ ok: true, service: "fundarb-web", tradingControlPlane: true, relayConfigured: Boolean(env.EXECUTION_RELAY_URL), now: Date.now() });
-      if (url.pathname === "/api/scan") return scan(request);
+      if (url.pathname === "/api/scan") return scan(request, env);
       if (url.pathname.startsWith("/api/admin/hedges")) return handleTrading(request, env, url.pathname);
       if (url.pathname.startsWith("/api/admin/")) return handleControlPlane(request, env, url.pathname);
       if (url.pathname.startsWith("/api/")) return json({ error: "Not found" }, 404);

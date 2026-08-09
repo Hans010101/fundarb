@@ -9,8 +9,11 @@ import type { ExchangeName, Opportunity, ScanResponse } from "./lib/types";
 
 type View = "overview" | "opportunities" | "trade" | "connections" | "risk";
 
-const EXCHANGES: ExchangeName[] = ["Binance", "Bybit", "OKX", "Bitget"];
-const EXCHANGE_CN: Record<string, string> = { Binance: "币安", Bybit: "Bybit", OKX: "OKX", Bitget: "Bitget", Hyperliquid: "Hyperliquid" };
+const TRADING_EXCHANGES: ExchangeName[] = ["Binance", "Bybit", "OKX", "Bitget", "Gate.io", "KuCoin"];
+const EXCHANGE_CN: Record<string, string> = {
+  Binance: "币安", Bybit: "Bybit", OKX: "OKX", Bitget: "Bitget", Hyperliquid: "Hyperliquid",
+  "Gate.io": "Gate.io", KuCoin: "KuCoin", MEXC: "MEXC", Phemex: "Phemex",
+};
 const DEFAULT_QUERY = { feeBps: 5.5, slippageBps: 2, periods: 21, minApr: 12, minVolume: 50 };
 
 function pct(value: number, digits = 2): string { return `${(value * 100).toFixed(digits)}%`; }
@@ -38,12 +41,17 @@ function ModeBadge({ mode }: { mode: ExecutionMode }) {
 function OpportunityTable({ data, onTrade }: { data: ScanResponse | null; onTrade: (item: Opportunity) => void }) {
   const [search, setSearch] = useState("");
   const [onlyReady, setOnlyReady] = useState(false);
-  const rows = useMemo(() => (data?.opportunities ?? []).filter((item) => (!onlyReady || item.executable) && (!search || item.symbol.includes(search.toUpperCase()))), [data, onlyReady, search]);
+  const [exchangeFilter, setExchangeFilter] = useState("all");
+  const rows = useMemo(() => (data?.opportunities ?? []).filter((item) =>
+    (!onlyReady || item.executable)
+    && (!search || item.symbol.includes(search.toUpperCase()))
+    && (exchangeFilter === "all" || item.longExchange === exchangeFilter || item.shortExchange === exchangeFilter),
+  ), [data, exchangeFilter, onlyReady, search]);
   return (
     <section className="panel opportunity-panel">
       <div className="panel-heading">
         <div><p className="kicker">实时资金费率</p><h2>跨交易所机会</h2><span>已统一到 8 小时，并扣除四腿手续费与滑点</span></div>
-        <div className="table-actions"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索币种" /><button className={onlyReady ? "active" : ""} onClick={() => setOnlyReady(!onlyReady)}>仅看达标</button></div>
+        <div className="table-actions"><select aria-label="筛选交易所" value={exchangeFilter} onChange={(event) => setExchangeFilter(event.target.value)}><option value="all">全部交易所</option>{data?.health.map((item) => <option key={item.exchange} value={item.exchange}>{EXCHANGE_CN[item.exchange]} · {item.ok ? `${item.quoteCount} 对` : "不可用"}</option>)}</select><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索币种" /><button className={onlyReady ? "active" : ""} onClick={() => setOnlyReady(!onlyReady)}>仅看达标</button><span className="row-count">{rows.length} 条</span></div>
       </div>
       <div className="table-scroll">
         <table>
@@ -82,16 +90,19 @@ function ConnectionsView({ status, request, refresh }: { status: ControlPlaneSta
     } catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); } finally { setBusy(false); }
   }
   async function action(path: string, init?: RequestInit) { setBusy(true); setError(""); try { await request(path, init); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "操作失败"); } finally { setBusy(false); } }
+  const needsPassphrase = ["OKX", "Bitget", "KuCoin"].includes(form.exchange);
+  useEffect(() => { if (form.exchange === "KuCoin" && form.environment !== "live") setForm((current) => ({ ...current, environment: "live" })); }, [form.exchange, form.environment]);
   return <div className="two-column">
-    <section className="panel form-panel"><div className="panel-heading"><div><p className="kicker">API 保险箱</p><h2>添加交易所账户</h2><span>建议使用独立子账户，仅开启合约读取与交易权限，禁止提现</span></div><KeyRound className="heading-icon" /></div>
+    <section className="panel form-panel"><div className="panel-heading"><div><p className="kicker">API 保险箱</p><h2>添加交易所账户</h2><span>6 家交易所支持验权与双腿下单；建议使用独立子账户、禁提现并绑定固定 IP</span></div><KeyRound className="heading-icon" /></div>
       <div className="form-grid">
-        <label>交易所<select value={form.exchange} onChange={(event) => setForm({ ...form, exchange: event.target.value })}>{EXCHANGES.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label>账户环境<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })}><option value="testnet">Testnet 测试网</option><option value="live">Live 主网</option></select></label>
+        <label>交易所<select value={form.exchange} onChange={(event) => setForm({ ...form, exchange: event.target.value })}>{TRADING_EXCHANGES.map((item) => <option key={item} value={item}>{EXCHANGE_CN[item]}</option>)}</select></label>
+        <label>账户环境<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })} disabled={form.exchange === "KuCoin"}>{form.exchange !== "KuCoin" && <option value="testnet">Testnet 测试网</option>}<option value="live">Live 主网</option></select></label>
         <label className="wide">连接名称<input value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder="例如：币安套保子账户" /></label>
         <label className="wide">API Key<input type="password" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} autoComplete="off" /></label>
         <label className="wide">API Secret<input type="password" value={form.apiSecret} onChange={(event) => setForm({ ...form, apiSecret: event.target.value })} autoComplete="off" /></label>
-        {(form.exchange === "OKX" || form.exchange === "Bitget") && <label className="wide">Passphrase<input type="password" value={form.passphrase} onChange={(event) => setForm({ ...form, passphrase: event.target.value })} autoComplete="off" /></label>}
+        {needsPassphrase && <label className="wide">Passphrase<input type="password" value={form.passphrase} onChange={(event) => setForm({ ...form, passphrase: event.target.value })} autoComplete="off" /></label>}
       </div>
+      <div className="connector-coverage"><p><strong>可真实交易</strong><span>币安、Bybit、OKX、Bitget、Gate.io、KuCoin</span></p><p><strong>行情监控</strong><span>另含 Hyperliquid、MEXC、Phemex；这些平台暂不开放账户保存与自动下单</span></p></div>
       <div className="security-note"><ShieldCheck size={19} /><span>AES-256-GCM 加密 · 主密钥仅存在 Cloudflare Secret · D1 不保存明文 · 每次加密使用独立随机 IV</span></div>
       {error && <p className="form-error">{error}</p>}{message && <p className="form-success">{message}</p>}
       <button className="primary-button full" onClick={save} disabled={busy}>保存到加密保险箱</button>
@@ -142,7 +153,7 @@ function Overview({ data, status, setView }: { data: ScanResponse | null; status
   return <><section className="overview-hero"><div><p className="kicker">个人跨所套保终端</p><h1>扫描费率，<br /><em>执行双腿交易。</em></h1><p>统一管理交易所账户、资金费率机会、双腿委托、持仓和平仓。每一次真实订单都经过账户隔离、名义上限、幂等键、紧急停止和固定 IP 中继。</p><div className="hero-actions"><button className="primary-button" onClick={() => setView("opportunities")}>查看套利机会</button><button className="text-button" onClick={() => setView("trade")}>进入双腿交易 →</button></div></div><aside><p>当前最优达标机会</p><strong>{best ? pct(best.expectedNetApr, 1) : "—"}</strong><span>{best ? `${best.symbol} · ${EXCHANGE_CN[best.longExchange]}多 / ${EXCHANGE_CN[best.shortExchange]}空` : "暂无同时满足收益与流动性门槛的机会"}</span><small>成本后估算，不构成收益承诺</small></aside></section>
     <section className="metric-grid"><article><Activity /><span>达标机会</span><strong>{ready}</strong><small>实时成本模型</small></article><article><Database /><span>共同交易对</span><strong>{data?.commonSymbolCount ?? "—"}</strong><small>至少覆盖两个平台</small></article><article><Cable /><span>已启用账户</span><strong>{status?.connections.filter((item) => item.enabled).length ?? "—"}</strong><small>加密连接</small></article><article><ShieldCheck /><span>当前模式</span><strong className="mode-text">{status ? <ModeBadge mode={status.settings.mode} /> : "验证中"}</strong><small>{status?.settings.executionEmergencyStop === false ? "交易链路待命" : "紧急停止保护中"}</small></article></section>
     <section className="workflow-section"><div className="section-title"><p className="kicker">完整工作流</p><h2>从机会发现到双腿退出</h2></div><div className="workflow-line"><article><b>01</b><h3>连接账户</h3><p>子账户 API 加密保存在 Cloudflare，禁提现并绑定固定出口 IP。</p></article><article><b>02</b><h3>筛选机会</h3><p>归一化费率、手续费、滑点、回本周期和双边流动性。</p></article><article><b>03</b><h3>双腿执行</h3><p>难腿优先，持久化幂等订单，第二腿失败自动发起回滚。</p></article><article><b>04</b><h3>监控与退出</h3><p>跟踪净 Delta、保证金、费率反转，并用 reduce-only 双腿平仓。</p></article></div></section>
-    <section className="dashboard-lower"><div className="panel compact"><div className="panel-heading"><div><p className="kicker">数据连接</p><h2>交易所状态</h2></div></div><div className="source-grid">{data?.health.map((item) => <div key={item.exchange}><ExchangeBadge name={item.exchange} /><span>{EXCHANGE_CN[item.exchange]}</span><b className={item.ok ? "success-text" : "danger-text"}>{item.ok ? `${item.quoteCount} 对` : "不可用"}</b></div>)}</div></div><div className="panel compact risk-summary"><div><p className="kicker">安全状态</p><h2>{status ? (status.settings.executionEmergencyStop ? "真实委托已停止" : "真实委托链路待命") : "正在验证交易身份"}</h2><p>{status ? `当前为 ${status.settings.mode.toUpperCase()} 模式；固定 IP 中继${status.relayConfigured ? "已配置" : "未配置"}。` : "Cloudflare 邮箱身份验证完成后即可管理账户、执行总闸和套保持仓。"}</p></div><button className="outline-button" onClick={() => setView(status ? "risk" : "connections")}>查看安全设置</button></div></section></>;
+    <section className="dashboard-lower"><div className="panel compact"><div className="panel-heading"><div><p className="kicker">数据连接</p><h2>交易所状态</h2><span>{data ? `${data.healthySourceCount}/${data.sourceCount} 个来源在线，共 ${data.quoteCount} 条永续合约费率` : "正在连接行情源"}</span></div></div><div className="source-grid">{data?.health.map((item) => <div key={item.exchange}><ExchangeBadge name={item.exchange} /><span>{EXCHANGE_CN[item.exchange]}</span><b className={item.ok ? "success-text" : "danger-text"}>{item.ok ? `${item.quoteCount} 对` : "不可用"}</b>{!item.ok && <small title={item.error}>{item.error ?? "上游接口异常"}</small>}</div>)}</div></div><div className="panel compact risk-summary"><div><p className="kicker">安全状态</p><h2>{status ? (status.settings.executionEmergencyStop ? "真实委托已停止" : "真实委托链路待命") : "正在验证交易身份"}</h2><p>{status ? `当前为 ${status.settings.mode.toUpperCase()} 模式；固定 IP 中继${status.relayConfigured ? "已配置" : "未配置"}。` : "Cloudflare 邮箱身份验证完成后即可管理账户、执行总闸和套保持仓。"}</p></div><button className="outline-button" onClick={() => setView(status ? "risk" : "connections")}>查看安全设置</button></div></section></>;
 }
 
 export default function App() {
@@ -178,7 +189,7 @@ export default function App() {
   function openTrade(item: Opportunity) { setSelectedOpportunity(item); setView("trade"); window.scrollTo({ top: 0, behavior: "smooth" }); }
   const protectedView = view === "trade" || view === "connections" || view === "risk";
 
-  return <div className="app-shell"><a className="skip-link" href="#main">跳到主要内容</a><header><div className="header-inner"><button className="brand" onClick={() => setView("overview")}><span className="brand-seal">套</span><span><strong>FundArb</strong><small>跨所套保交易终端</small></span></button><nav>{[["overview", "总览"], ["opportunities", "套利机会"], ["trade", "双腿交易"], ["connections", "账户连接"], ["risk", "风控中心"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key as View)}>{label}</button>)}</nav><div className="header-tools"><span className={`market-state ${data?.health.some((item) => item.ok) ? "online" : ""}`}><i />{data?.health.filter((item) => item.ok).length ?? 0}/5 数据源</span><button className="icon-button" aria-label="刷新" onClick={() => void loadScan()}><RefreshCw size={19} className={loading ? "spin" : ""} /></button>{status ? <button className="operator-button" onClick={logout} title={status.identityEmail}><LogOut size={17} />{status.authenticationMethod === "cloudflare-access" ? "退出邮箱登录" : "退出应急会话"}</button> : <button className="operator-button" onClick={() => setView("connections")}><KeyRound size={17} />Google 邮箱登录</button>}</div></div></header>
+  return <div className="app-shell"><a className="skip-link" href="#main">跳到主要内容</a><header><div className="header-inner"><button className="brand" onClick={() => setView("overview")}><span className="brand-seal">套</span><span><strong>FundArb</strong><small>跨所套保交易终端</small></span></button><nav>{[["overview", "总览"], ["opportunities", "套利机会"], ["trade", "双腿交易"], ["connections", "账户连接"], ["risk", "风控中心"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key as View)}>{label}</button>)}</nav><div className="header-tools"><span className={`market-state ${data?.healthySourceCount ? "online" : ""}`}><i />{data?.healthySourceCount ?? 0}/{data?.sourceCount ?? 9} 数据源</span><button className="icon-button" aria-label="刷新" onClick={() => void loadScan()}><RefreshCw size={19} className={loading ? "spin" : ""} /></button>{status ? <button className="operator-button" onClick={logout} title={status.identityEmail}><LogOut size={17} />{status.authenticationMethod === "cloudflare-access" ? "退出邮箱登录" : "退出应急会话"}</button> : <button className="operator-button" onClick={() => setView("connections")}><KeyRound size={17} />Google 邮箱登录</button>}</div></div></header>
     <main id="main" className="main-container">{publicError && <div className="banner danger"><XCircle size={20} />{publicError}</div>}
       {view === "overview" && <Overview data={data} status={status} setView={setView} />}
       {view === "opportunities" && <><div className="page-heading"><div><p className="kicker">资金费率扫描</p><h1>套利机会</h1><p>观察值不是下单指令。进入交易前还需核对盘口深度、账户余额与保证金安全垫。</p></div><button className="icon-button large" onClick={() => void loadScan()}><RefreshCw size={21} className={loading ? "spin" : ""} /></button></div><section className="filter-panel"><div><SlidersHorizontal size={20} /><strong>收益假设</strong></div><label>单腿手续费 <b>{draft.feeBps} bp</b><input type="range" min="0" max="15" step="0.5" value={draft.feeBps} onChange={(e) => setDraft({ ...draft, feeBps: Number(e.target.value) })} /></label><label>单腿滑点 <b>{draft.slippageBps} bp</b><input type="range" min="0" max="20" step="0.5" value={draft.slippageBps} onChange={(e) => setDraft({ ...draft, slippageBps: Number(e.target.value) })} /></label><label>计划持有 <b>{draft.periods} 期</b><input type="range" min="3" max="90" step="3" value={draft.periods} onChange={(e) => setDraft({ ...draft, periods: Number(e.target.value) })} /></label><label>最低净 APR <b>{draft.minApr}%</b><input type="range" min="0" max="50" value={draft.minApr} onChange={(e) => setDraft({ ...draft, minApr: Number(e.target.value) })} /></label><button className="primary-button" onClick={() => setFilters(draft)}>重新计算</button></section><OpportunityTable data={data} onTrade={openTrade} /></>}
