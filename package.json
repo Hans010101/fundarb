@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "type-check": "tsc -b --pretty false",
+    "test:relay": "node --test apps/execution-relay/server.test.mjs",
+    "types:worker": "wrangler types",
+    "type-check": "npm run types:worker && tsc -b --pretty false",
     "deploy": "npm run build && wrangler deploy",
     "deploy:dry": "npm run build && wrangler deploy --dry-run",
     "cf-types": "wrangler types worker-configuration.d.ts"

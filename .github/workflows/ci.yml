@@ -16,6 +16,7 @@ jobs:
       - run: npm ci
       - run: npm run type-check
       - run: npm test
+      - run: npm run test:relay
       - run: npm run build
 
   deploy:
@@ -31,7 +32,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npm run type-check && npm test && npm run test:relay && npm run build
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

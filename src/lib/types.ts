@@ -54,7 +54,7 @@ export interface ScanParameters {
 export interface ScanResponse {
   generatedAt: number;
   staleAfterMs: number;
-  mode: "market-data-only";
+  mode: "trading-terminal";
   params: ScanParameters;
   opportunities: Opportunity[];
   health: ExchangeHealth[];

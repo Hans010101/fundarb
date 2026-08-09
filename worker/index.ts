@@ -1,8 +1,9 @@
 import { buildOpportunities } from "../src/lib/funding";
 import type { ScanParameters, ScanResponse } from "../src/lib/types";
+import { handleControlPlane } from "./control-plane";
 import { fetchAllExchanges } from "./exchanges";
-
-interface Env { ASSETS: Fetcher }
+import { HttpError, isAdmin, json } from "./http";
+import { handleTrading } from "./trading";
 
 const DEFAULTS: ScanParameters = {
   feeBpsPerLeg: 5.5,
@@ -33,17 +34,6 @@ function parameters(url: URL): ScanParameters {
   };
 }
 
-function json(data: unknown, status = 200, cache = "no-store"): Response {
-  return Response.json(data, {
-    status,
-    headers: {
-      "cache-control": cache,
-      "content-security-policy": "default-src 'none'",
-      "x-content-type-options": "nosniff",
-    },
-  });
-}
-
 async function scan(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const cacheKey = new Request(url.toString(), request);
@@ -57,13 +47,13 @@ async function scan(request: Request): Promise<Response> {
   for (const item of quotes) exchangeCounts.set(item.symbol, (exchangeCounts.get(item.symbol) ?? 0) + 1);
   const warnings = [
     "费率是实时预测/当前值，不等于最终结算到账；实盘决策必须以结算流水对账。",
-    "当前看板只提供市场数据与成本模型，不保存交易密钥，也不会发送订单。",
+    "账户连接和双腿交易位于受保护的个人控制台；真实委托仍受紧急停止、环境、名义上限与固定 IP 中继约束。",
   ];
   for (const item of health.filter((entry) => !entry.ok)) warnings.push(`${item.exchange} 数据暂不可用：${item.error ?? "未知错误"}`);
   const body: ScanResponse = {
     generatedAt: Date.now(),
     staleAfterMs: 60_000,
-    mode: "market-data-only",
+    mode: "trading-terminal",
     params,
     opportunities: buildOpportunities(quotes, params),
     health,
@@ -80,13 +70,17 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/health") return json({ ok: true, service: "fundarb-web", executionEnabled: false, now: Date.now() });
+      if (url.pathname === "/api/health") return json({ ok: true, service: "fundarb-web", tradingControlPlane: true, relayConfigured: Boolean(env.EXECUTION_RELAY_URL), now: Date.now() });
       if (url.pathname === "/api/scan") return scan(request);
+      if (url.pathname.startsWith("/api/admin/") && !isAdmin(request, env)) return json({ error: "管理凭证无效" }, 401);
+      if (url.pathname.startsWith("/api/admin/hedges")) return handleTrading(request, env, url.pathname);
+      if (url.pathname.startsWith("/api/admin/")) return handleControlPlane(request, env, url.pathname);
       if (url.pathname.startsWith("/api/")) return json({ error: "Not found" }, 404);
       return env.ASSETS.fetch(request);
     } catch (error) {
       console.error(JSON.stringify({ event: "request_failed", path: url.pathname, error: error instanceof Error ? error.message : "unknown" }));
-      return json({ error: "Upstream market data is temporarily unavailable" }, 502);
+      if (error instanceof HttpError) return json({ error: error.message }, error.status);
+      return json({ error: "服务暂时不可用，请稍后重试" }, 502);
     }
   },
 } satisfies ExportedHandler<Env>;

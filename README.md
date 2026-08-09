@@ -1,8 +1,8 @@
 # FundArb
 
-跨交易所永续合约资金费率研究雷达。实时聚合 Binance、Bybit、OKX、Bitget 与 Hyperliquid，按实际结算周期统一到 8 小时，并用四腿手续费、滑点与持有期计算成本后年化和回本期数。
+个人使用的跨交易所永续合约套保交易终端。实时聚合 Binance、Bybit、OKX、Bitget 与 Hyperliquid，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。
 
-> 当前是只读市场数据产品：不接收 API Key、不保存账户信息、不发送订单。它不是实盘交易机器人，也不构成投资建议。
+> 系统具备真实交易接口，但生产环境默认开启紧急停止，并关闭真实委托和主网许可。固定 IP 执行中继未配置前，后端会硬拒绝 Testnet/Live 请求。它不构成投资建议。
 
 ## 本地运行
 
@@ -21,6 +21,7 @@ npx wrangler dev
 ```bash
 npm run type-check
 npm test
+npm run test:relay
 npm run build
 npm run deploy:dry
 ```
@@ -40,10 +41,17 @@ npm run deploy
 - `GET /api/health`：服务状态与执行总闸。
 - `GET /api/scan`：实时机会矩阵。
 - 查询参数：`feeBps`、`slippageBps`、`periods`、`maxPeriods`、`minApr`、`minVolume`。
+- `GET /api/admin/status`：账户、模式、总闸与套保任务（需管理 Bearer 凭证）。
+- `POST /api/admin/connections`：加密保存交易所 API 凭证。
+- `POST /api/admin/connections/:id/verify`：经固定 IP 中继执行账户验权。
+- `POST /api/admin/hedges`：创建 Paper/Testnet/Live 双腿委托。
+- `POST /api/admin/hedges/:id/close`：以 reduce-only 双腿平仓。
 
 ## 安全边界
 
-真实执行器不得部署到 Cloudflare Workers。它需要固定出口 IP、交易所 API 白名单、独立子账户、禁提现、engine/risk 独立密钥、持久化幂等订单和启动对账。公开仓库中不得提交交易所密钥、账户参数或 live 开关。
+公开仓库只保存业务代码。交易所密钥在 Worker 内使用 AES-256-GCM 加密后写入 D1；加密主密钥、管理凭证和中继凭证仅存在 Cloudflare Secret。真正访问交易所的请求必须经过 `apps/execution-relay` 固定出口中继，该中继只允许预设交易所主机、路径、方法和请求头。交易账户必须使用独立子账户、禁提现和 IP 白名单。
+
+上线顺序与中继配置见 [实盘运维手册](docs/LIVE_OPERATIONS.md)。
 
 ## License
 

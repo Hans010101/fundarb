@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["worker", "src/lib/funding.ts", "src/lib/types.ts"]
+  "include": ["worker-configuration.d.ts", "worker", "src/lib/funding.ts", "src/lib/types.ts"]
 }
