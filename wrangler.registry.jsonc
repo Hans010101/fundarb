@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fundarb-relay-registry",
+  "main": "worker/relay-registry.ts",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "secrets": { "required": ["EXECUTION_RELAY_TOKEN"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fundarb-core",
+      "database_id": "3aa523f0-eeaf-4bf9-8daf-a13dfcfa9f5b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": { "enabled": true, "logs": { "head_sampling_rate": 1 } }
+}

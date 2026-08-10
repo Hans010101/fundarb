@@ -2,6 +2,7 @@ import type { ExecutionMode } from "../src/lib/admin-types";
 import { assertOrderAccepted, signOrder, type DecryptedConnection, type OrderLeg, type TradingEnvironment } from "./connectors";
 import { connectionById, relay, settingsMap } from "./control-plane";
 import { HttpError, json, readJson, requireAdmin } from "./http";
+import { relayAvailable, resolveRelayTransport } from "./relay";
 
 const ABSOLUTE_MAX_ORDER_NOTIONAL_USD = 10_000;
 
@@ -110,7 +111,7 @@ async function validateExecution(env: Env, mode: ExecutionMode, notionalUsd: num
   if (mode !== "paper") {
     if (settings.get("execution_emergency_stop") !== "false") throw new HttpError(409, "紧急停止仍处于开启状态");
     if (settings.get("order_submission_enabled") !== "true") throw new HttpError(409, "真实委托总闸尚未打开");
-    if (!env.EXECUTION_RELAY_URL) throw new HttpError(409, "固定 IP 执行中继尚未配置");
+    if (!relayAvailable(await resolveRelayTransport(env))) throw new HttpError(409, "固定 IP 执行中继当前不可用");
   }
   if (mode === "live") {
     if (settings.get("live_enabled") !== "true") throw new HttpError(409, "主网交易总闸尚未打开");

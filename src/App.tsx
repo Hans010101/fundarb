@@ -95,7 +95,7 @@ function ConnectionsView({ status, request, refresh }: { status: ControlPlaneSta
   const hyperliquid = form.exchange === "Hyperliquid";
   useEffect(() => { if (liveOnly && form.environment !== "live") setForm((current) => ({ ...current, environment: "live" })); }, [form.environment, liveOnly]);
   return <div className="two-column">
-    <section className="panel form-panel"><div className="panel-heading"><div><p className="kicker">API 保险箱</p><h2>添加交易所账户</h2><span>9 家交易所均已建立验权与下单适配；建议使用独立子账户、禁提现并绑定固定 IP</span></div><KeyRound className="heading-icon" /></div>
+    <section className="panel form-panel"><div className="panel-heading"><div><p className="kicker">API 保险箱</p><h2>添加交易所账户</h2><span>9 家交易所均已建立验权与下单适配；建议使用独立子账户、禁提现并绑定固定 IP。币安、OKX、Bitget 请设置为单向/净持仓模式。</span></div><KeyRound className="heading-icon" /></div>
       <div className="form-grid">
         <label>交易所<select value={form.exchange} onChange={(event) => setForm({ ...form, exchange: event.target.value })}>{TRADING_EXCHANGES.map((item) => <option key={item} value={item}>{EXCHANGE_CN[item]}</option>)}</select></label>
         <label>账户环境<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })} disabled={liveOnly}>{!liveOnly && <option value="testnet">Testnet 测试网</option>}<option value="live">Live 主网</option></select></label>

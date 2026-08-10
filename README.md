@@ -55,7 +55,7 @@ npm run deploy
 | Hyperliquid / Gate.io / WEEX | 是 | 是 |
 | HTX / Coinbase INTX | 是 | 是 |
 
-行情接口会逐路显示在线状态、合约数量与上游错误，不会用静态模拟数据掩盖故障。Cloudflare 边缘出口可能被个别交易所的 WAF 或共享 IP 限流；`EXECUTION_RELAY_URL` 配置后，行情请求会在直接访问失败时自动回退到同一个固定 IP 白名单中继。
+行情接口会逐路显示在线状态、合约数量与上游错误，不会用静态模拟数据掩盖故障。Cloudflare 边缘出口可能被个别交易所的 WAF 或共享 IP 限流；静态 `EXECUTION_RELAY_URL` 或自动注册的 macOS 中继可让行情请求在直连失败时回退到受控出口。OKX 资金费使用官方 `instId=ANY` 批量接口，避免逐合约请求触发 429。
 
 ## 安全边界
 

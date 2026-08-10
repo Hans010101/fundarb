@@ -1,16 +1,18 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
+import { pathToFileURL } from "node:url";
 
 const PORT = Number(process.env.PORT ?? "8788");
 const RELAY_TOKEN = process.env.FUNDARB_RELAY_TOKEN ?? "";
 const MAX_BODY_BYTES = 32_768;
 const MAX_FORWARD_BODY_BYTES = 16_384;
+const MAX_UPSTREAM_BODY_BYTES = 4_194_304;
 const REQUEST_TTL_MS = 15_000;
 const seenRequestIds = new Map();
 
 const ALLOWLIST = new Map([
-  ["fapi.binance.com", new Map([["POST", ["/fapi/v1/order"]], ["GET", ["/fapi/v2/account", "/fapi/v1/premiumIndex", "/fapi/v1/fundingInfo", "/fapi/v1/ticker/24hr"]]])],
-  ["testnet.binancefuture.com", new Map([["POST", ["/fapi/v1/order"]], ["GET", ["/fapi/v2/account"]]])],
+  ["fapi.binance.com", new Map([["POST", ["/fapi/v1/order"]], ["GET", ["/fapi/v3/account", "/fapi/v1/premiumIndex", "/fapi/v1/fundingInfo", "/fapi/v1/ticker/24hr"]]])],
+  ["testnet.binancefuture.com", new Map([["POST", ["/fapi/v1/order"]], ["GET", ["/fapi/v3/account"]]])],
   ["api.bybit.com", new Map([["POST", ["/v5/order/create"]], ["GET", ["/v5/account/wallet-balance", "/v5/market/tickers"]]])],
   ["api-testnet.bybit.com", new Map([["POST", ["/v5/order/create"]], ["GET", ["/v5/account/wallet-balance"]]])],
   ["www.okx.com", new Map([["POST", ["/api/v5/trade/order"]], ["GET", ["/api/v5/account/balance", "/api/v5/market/tickers", "/api/v5/public/funding-rate"]]])],
@@ -83,7 +85,7 @@ function send(response, status, body) {
 export function createRelayServer() {
   return createServer(async (request, response) => {
     try {
-      if (request.method === "GET" && request.url === "/health") return send(response, 200, { ok: true, service: "fundarb-execution-relay" });
+      if (request.method === "GET" && request.url === "/health") return send(response, 200, { ok: true, service: "fundarb-execution-relay", allowedEnvironment: "both" });
       if (request.method !== "POST" || request.url !== "/v1/forward") return send(response, 404, { error: "接口不存在" });
       const bearer = request.headers.authorization?.startsWith("Bearer ") ? request.headers.authorization.slice(7) : "";
       if (!RELAY_TOKEN || !safeEqual(bearer, RELAY_TOKEN)) return send(response, 401, { error: "中继凭证无效" });
@@ -94,8 +96,14 @@ export function createRelayServer() {
       if (seenRequestIds.has(payload.requestId)) return send(response, 409, { error: "重复 requestId 已拒绝" });
       seenRequestIds.set(payload.requestId, now + REQUEST_TTL_MS);
       const upstream = await fetch(target, { method: payload.method, headers, body: payload.method === "POST" ? (payload.body ?? "") : undefined, signal: AbortSignal.timeout(8_000) });
-      const upstreamBody = (await upstream.text()).slice(0, MAX_FORWARD_BODY_BYTES);
-      response.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") ?? "application/json", "cache-control": "no-store", "x-content-type-options": "nosniff" });
+      const upstreamBody = Buffer.from(await upstream.arrayBuffer());
+      if (upstreamBody.length > MAX_UPSTREAM_BODY_BYTES) throw new Error("上游响应超过 4 MB 安全上限");
+      response.writeHead(upstream.status, {
+        "content-type": upstream.headers.get("content-type") ?? "application/json",
+        "content-length": String(upstreamBody.length),
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      });
       response.end(upstreamBody);
     } catch (error) {
       send(response, 400, { error: error instanceof Error ? error.message : "中继请求失败" });
@@ -103,7 +111,7 @@ export function createRelayServer() {
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (!RELAY_TOKEN) throw new Error("FUNDARB_RELAY_TOKEN is required");
   createRelayServer().listen(PORT, "127.0.0.1", () => {
     console.log(JSON.stringify({ event: "relay_started", port: PORT }));

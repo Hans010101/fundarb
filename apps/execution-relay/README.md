@@ -24,3 +24,15 @@ docker run --restart=always -p 127.0.0.1:8788:8788 \
 ```
 
 请通过 HTTPS 反向代理或 Cloudflare Tunnel 暴露，并把该主机固定出口 IP 加入每个交易所 API 白名单。真实交易前必须完成 Testnet 的超时、重复请求、第二腿失败和回滚演练。
+
+## macOS 个人工作站模式
+
+仓库同时提供与“点金手”一致的个人工作站方案：本机中继监听 `127.0.0.1:8790`，Quick Tunnel 每分钟向独立注册 Worker 上报临时入口，5 分钟无心跳即自动失效；公网 IPv4 变化时会立即停止中继。API Secret 始终只在 Cloudflare D1 中以 AES-256-GCM 密文保存，中继只接收 Worker 已签名且在白名单内的短时请求。
+
+部署 `fundarb-relay-registry`、设置与主 Worker 相同的 `EXECUTION_RELAY_TOKEN` 后执行：
+
+```bash
+zsh apps/execution-relay/mac/install.zsh
+```
+
+输出的 IPv4 必须加入 Binance、OKX、Bitget API Key 的 IP 白名单。Mac 需要保持联网且不进入深度睡眠；长期无人值守实盘应把同一中继镜像迁移到固定 IP VPS。

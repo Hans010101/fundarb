@@ -3,6 +3,7 @@ import type { ScanParameters, ScanResponse } from "../src/lib/types";
 import { handleControlPlane } from "./control-plane";
 import { fetchAllExchanges } from "./exchanges";
 import { HttpError, json } from "./http";
+import { relayAvailable, resolveRelayTransport } from "./relay";
 import { handleTrading } from "./trading";
 
 const DEFAULTS: ScanParameters = {
@@ -42,7 +43,8 @@ async function scan(request: Request, env: Env): Promise<Response> {
   if (cached) return cached;
 
   const params = parameters(url);
-  const { quotes, health } = await fetchAllExchanges(env);
+  const relayTransport = await resolveRelayTransport(env);
+  const { quotes, health } = await fetchAllExchanges(relayTransport);
   const exchangeCounts = new Map<string, number>();
   for (const item of quotes) exchangeCounts.set(item.symbol, (exchangeCounts.get(item.symbol) ?? 0) + 1);
   const warnings = [
@@ -72,7 +74,19 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/health") return json({ ok: true, service: "fundarb-web", tradingControlPlane: true, relayConfigured: Boolean(env.EXECUTION_RELAY_URL), now: Date.now() });
+      if (url.pathname === "/api/health") {
+        const relayTransport = await resolveRelayTransport(env);
+        return json({
+          ok: true,
+          service: "fundarb-web",
+          tradingControlPlane: true,
+          relayConfigured: relayAvailable(relayTransport),
+          relaySource: relayTransport.source,
+          relayEgressIpv4: relayTransport.egressIpv4,
+          relayExpiresAt: relayTransport.expiresAt,
+          now: Date.now(),
+        });
+      }
       if (url.pathname === "/api/scan") return scan(request, env);
       if (url.pathname.startsWith("/api/admin/hedges")) return handleTrading(request, env, url.pathname);
       if (url.pathname.startsWith("/api/admin/")) return handleControlPlane(request, env, url.pathname);

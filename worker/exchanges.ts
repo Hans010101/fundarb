@@ -1,5 +1,6 @@
 import { normalizeFunding } from "../src/lib/funding";
 import type { ExchangeHealth, ExchangeName, FundingQuote } from "../src/lib/types";
+import type { RelayTransport } from "./relay";
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -8,17 +9,17 @@ interface FetchResult {
   health: ExchangeHealth;
 }
 
-type MarketEnv = Pick<Env, "EXECUTION_RELAY_URL" | "EXECUTION_RELAY_TOKEN">;
+type MarketEnv = RelayTransport;
 
 async function relayFetch(exchange: ExchangeName, url: string, env: MarketEnv, init?: RequestInit): Promise<Response> {
-  const relayUrl = (env.EXECUTION_RELAY_URL as string).trim();
+  const relayUrl = env.relayUrl?.trim() ?? "";
   if (!relayUrl) throw new Error("固定出口行情中继未配置");
   const sourceHeaders = new Headers(init?.headers);
   sourceHeaders.set("accept", "application/json");
   const headers = Object.fromEntries(sourceHeaders.entries());
   const response = await fetch(`${relayUrl.replace(/\/$/, "")}/v1/forward`, {
     method: "POST",
-    headers: { authorization: `Bearer ${env.EXECUTION_RELAY_TOKEN}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${env.relayToken}`, "content-type": "application/json" },
     body: JSON.stringify({
       requestId: crypto.randomUUID(),
       exchange,
@@ -61,7 +62,7 @@ async function jsonFetch<T>(exchange: ExchangeName, url: string, env: MarketEnv,
     }
     throw directError;
   } catch (finalDirectError) {
-    if (!(env.EXECUTION_RELAY_URL as string).trim()) throw finalDirectError;
+    if (!env.relayUrl?.trim()) throw finalDirectError;
     try {
       return await (await relayFetch(exchange, url, env, { ...init, headers })).json<T>();
     } catch (relayError) {
@@ -194,29 +195,26 @@ async function binance(env: MarketEnv): Promise<FundingQuote[]> {
 }
 
 interface OkxTicker { instId: string; last?: string; volCcy24h?: string }
-interface OkxFunding { instId: string; fundingRate?: string; prevFundingTime?: string; nextFundingTime?: string }
+interface OkxFunding { instId: string; fundingRate?: string; fundingTime?: string; nextFundingTime?: string }
 interface OkxResponse<T> { code: string; msg: string; data: T }
 
 async function okx(env: MarketEnv): Promise<FundingQuote[]> {
-  const tickers = await jsonFetch<OkxResponse<OkxTicker[]>>("OKX", "https://www.okx.com/api/v5/market/tickers?instType=SWAP", env);
+  const [tickers, funding] = await Promise.all([
+    jsonFetch<OkxResponse<OkxTicker[]>>("OKX", "https://www.okx.com/api/v5/market/tickers?instType=SWAP", env),
+    jsonFetch<OkxResponse<OkxFunding[]>>("OKX", "https://www.okx.com/api/v5/public/funding-rate?instId=ANY", env),
+  ]);
   if (tickers.code !== "0") throw new Error(tickers.msg || `OKX ${tickers.code}`);
-  const top = tickers.data
-    .filter((item) => item.instId.endsWith("-USDT-SWAP"))
-    .map((item) => ({ item, notional: (positiveNumber(item.last) ?? 0) * (positiveNumber(item.volCcy24h) ?? 0) }))
-    .sort((a, b) => b.notional - a.notional)
-    .slice(0, 40);
-  const fundingRows = await Promise.allSettled(top.map(({ item }) => jsonFetch<OkxResponse<OkxFunding[]>>("OKX", `https://www.okx.com/api/v5/public/funding-rate?instId=${encodeURIComponent(item.instId)}`, env)));
-  return fundingRows.flatMap((result, index) => {
-    if (result.status === "rejected") return [];
-    const response = result.value;
-    const row = response.data[0];
-    const ticker = top[index];
+  if (funding.code !== "0") throw new Error(funding.msg || `OKX ${funding.code}`);
+  const tickerMap = new Map(tickers.data.map((item) => [item.instId, item]));
+  return funding.data.flatMap((row) => {
+    const ticker = tickerMap.get(row.instId);
     const rate = finiteNumber(row?.fundingRate);
-    const previous = finiteNumber(row?.prevFundingTime);
+    const current = finiteNumber(row?.fundingTime);
     const next = finiteNumber(row?.nextFundingTime);
-    const interval = previous !== null && next !== null ? (next - previous) / 3_600_000 : null;
-    if (response.code !== "0" || !row || rate === null || interval === null || interval <= 0) return [];
-    return [quote("OKX", row.instId.replace(/-USDT-SWAP$/, ""), rate, interval, positiveNumber(ticker.item.last), ticker.notional || null, next, "exchange_api")];
+    const interval = current !== null && next !== null ? (next - current) / 3_600_000 : null;
+    if (!row.instId.endsWith("-USDT-SWAP") || !ticker || rate === null || interval === null || interval <= 0) return [];
+    const notional = (positiveNumber(ticker.last) ?? 0) * (positiveNumber(ticker.volCcy24h) ?? 0);
+    return [quote("OKX", row.instId.replace(/-USDT-SWAP$/, ""), rate, interval, positiveNumber(ticker.last), notional || null, next, "exchange_api")];
   });
 }
 

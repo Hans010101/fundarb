@@ -39,3 +39,9 @@ test("accepts only explicitly allowlisted public market-data paths", () => {
   assert.equal(market.target.pathname, "/fapi/v1/premiumIndex");
   assert.throws(() => validateForwardRequest({ ...valid, method: "GET", url: "https://fapi.binance.com/fapi/v1/openInterest", body: null }), /白名单/);
 });
+
+test("accepts current Binance futures account V3 and rejects retired V2", () => {
+  const account = validateForwardRequest({ ...valid, exchange: "Binance", method: "GET", url: "https://fapi.binance.com/fapi/v3/account?timestamp=1", body: null, headers: { "X-MBX-APIKEY": "key" } });
+  assert.equal(account.target.pathname, "/fapi/v3/account");
+  assert.throws(() => validateForwardRequest({ ...valid, exchange: "Binance", method: "GET", url: "https://fapi.binance.com/fapi/v2/account?timestamp=1", body: null }), /白名单/);
+});

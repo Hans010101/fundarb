@@ -1,6 +1,7 @@
 import type { ControlPlaneStatus, ExecutionMode } from "../src/lib/admin-types";
 import { SUPPORTED_EXCHANGES, assertVerificationAccepted, type DecryptedConnection, type TradingEnvironment, type TradingExchange, signVerification } from "./connectors";
 import { HttpError, json, readJson, requireAdmin, type AdminIdentity } from "./http";
+import { relayAvailable, resolveRelayTransport } from "./relay";
 import { credentialFingerprint, decryptCredential, encryptCredential } from "./vault";
 
 interface ConnectionRow {
@@ -67,11 +68,12 @@ export async function connectionById(env: Env, id: string): Promise<DecryptedCon
 }
 
 export async function relay(env: Env, payload: unknown): Promise<{ ok: boolean; status: number; body: string }> {
-  const relayUrl = env.EXECUTION_RELAY_URL as string;
-  if (!relayUrl) throw new HttpError(409, "尚未配置固定 IP 执行中继");
+  const transport = await resolveRelayTransport(env);
+  if (!relayAvailable(transport)) throw new HttpError(409, "固定 IP 执行中继当前不可用");
+  const relayUrl = transport.relayUrl!;
   const response = await fetch(`${relayUrl.replace(/\/$/, "")}/v1/forward`, {
     method: "POST",
-    headers: { authorization: `Bearer ${env.EXECUTION_RELAY_TOKEN}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${transport.relayToken}`, "content-type": "application/json" },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10_000),
   });
@@ -85,16 +87,17 @@ async function audit(env: Env, eventType: string, severity: string, payload: unk
 }
 
 async function status(env: Env, identity: AdminIdentity): Promise<Response> {
-  const [settings, connections, hedges] = await Promise.all([
+  const [settings, connections, hedges, relayTransport] = await Promise.all([
     settingsMap(env.DB),
     env.DB.prepare("SELECT * FROM exchange_connections ORDER BY created_at DESC").all<ConnectionRow>(),
     env.DB.prepare("SELECT * FROM hedge_intents ORDER BY created_at DESC LIMIT 50").all<HedgeRow>(),
+    resolveRelayTransport(env),
   ]);
   const body: ControlPlaneStatus = {
     authenticated: true,
     identityEmail: identity.email,
     authenticationMethod: identity.method,
-    relayConfigured: Boolean(env.EXECUTION_RELAY_URL),
+    relayConfigured: relayAvailable(relayTransport),
     settings: {
       mode: (settings.get("mode") ?? "paper") as ExecutionMode,
       executionEmergencyStop: bool(settings.get("execution_emergency_stop"), true),

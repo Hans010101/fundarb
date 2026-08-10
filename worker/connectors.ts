@@ -348,7 +348,7 @@ export async function signVerification(connection: DecryptedConnection): Promise
   if (connection.exchange === "Binance") {
     const params = new URLSearchParams({ recvWindow: "5000", timestamp: timestampMs });
     params.set("signature", await hmac(connection.apiSecret, params.toString(), "hex"));
-    return { requestId: crypto.randomUUID(), exchange: "Binance", method: "GET", url: `${baseUrl(connection)}/fapi/v2/account?${params}`, headers: { "X-MBX-APIKEY": connection.apiKey }, body: null };
+    return { requestId: crypto.randomUUID(), exchange: "Binance", method: "GET", url: `${baseUrl(connection)}/fapi/v3/account?${params}`, headers: { "X-MBX-APIKEY": connection.apiKey }, body: null };
   }
   if (connection.exchange === "Bybit") {
     const recvWindow = "5000";
