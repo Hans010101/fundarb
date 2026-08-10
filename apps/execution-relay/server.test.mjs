@@ -23,11 +23,15 @@ test("rejects unapproved headers", () => {
   assert.throws(() => validateForwardRequest({ ...valid, headers: { authorization: "secret" } }), /请求头/);
 });
 
-test("accepts Gate.io and KuCoin futures control-plane endpoints", () => {
+test("accepts Gate.io and the newly selected exchange endpoints", () => {
   const gate = validateForwardRequest({ ...valid, exchange: "Gate.io", url: "https://api.gateio.ws/api/v4/futures/usdt/orders", headers: { KEY: "key", Timestamp: "1", SIGN: "signature" } });
-  const kucoin = validateForwardRequest({ ...valid, exchange: "KuCoin", url: "https://api-futures.kucoin.com/api/v1/orders", headers: { "KC-API-KEY": "key", "KC-API-SIGN": "signature" } });
+  const weex = validateForwardRequest({ ...valid, exchange: "WEEX", url: "https://api-contract.weex.com/capi/v3/order", headers: { "ACCESS-KEY": "key", "ACCESS-SIGN": "signature" } });
+  const hyperliquid = validateForwardRequest({ ...valid, exchange: "Hyperliquid", url: "https://api.hyperliquid.xyz/exchange" });
+  const coinbase = validateForwardRequest({ ...valid, exchange: "Coinbase", method: "GET", url: "https://api.international.coinbase.com/api/v1/portfolios", body: null, headers: { "CB-ACCESS-KEY": "key", "CB-ACCESS-SIGN": "signature" } });
   assert.equal(gate.target.hostname, "api.gateio.ws");
-  assert.equal(kucoin.target.hostname, "api-futures.kucoin.com");
+  assert.equal(weex.target.hostname, "api-contract.weex.com");
+  assert.equal(hyperliquid.target.pathname, "/exchange");
+  assert.equal(coinbase.target.hostname, "api.international.coinbase.com");
 });
 
 test("accepts only explicitly allowlisted public market-data paths", () => {

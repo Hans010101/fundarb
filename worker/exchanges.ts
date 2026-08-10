@@ -96,15 +96,16 @@ function quote(
   volume24h: number | null,
   nextFundingTime: number | null,
   intervalSource: FundingQuote["intervalSource"],
+  quoteAsset: FundingQuote["quoteAsset"] = "USDT",
 ): FundingQuote {
-  return { exchange, symbol, rate, intervalHours, rate8h: normalizeFunding(rate, intervalHours), markPrice, volume24h, nextFundingTime, intervalSource };
+  return { exchange, symbol, quoteAsset, rate, intervalHours, rate8h: normalizeFunding(rate, intervalHours), markPrice, volume24h, nextFundingTime, intervalSource };
 }
 
 async function measured(exchange: ExchangeName, loader: () => Promise<FundingQuote[]>): Promise<FetchResult> {
   const started = Date.now();
   try {
     const quotes = await loader();
-    if (quotes.length === 0) throw new Error("接口成功但没有可用 USDT 永续费率");
+    if (quotes.length === 0) throw new Error("接口成功但没有可用永续费率");
     return { quotes, health: { exchange, ok: true, quoteCount: quotes.length, latencyMs: Date.now() - started } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown upstream error";
@@ -168,7 +169,7 @@ async function hyperliquid(env: MarketEnv): Promise<FundingQuote[]> {
     const context = contexts[index];
     const rate = finiteNumber(context?.funding);
     if (asset.isDelisted || rate === null) return [];
-    return [quote("Hyperliquid", asset.name, rate, 1, positiveNumber(context?.markPx), positiveNumber(context?.dayNtlVlm), nextBoundary(1), "protocol_rule")];
+    return [quote("Hyperliquid", asset.name, rate, 1, positiveNumber(context?.markPx), positiveNumber(context?.dayNtlVlm), nextBoundary(1), "protocol_rule", "USDC")];
   });
 }
 
@@ -237,71 +238,83 @@ async function gate(env: MarketEnv): Promise<FundingQuote[]> {
   });
 }
 
-interface KuCoinContract {
-  symbol: string;
-  displayBaseCurrency?: string;
-  quoteCurrency?: string;
-  settleCurrency?: string;
-  status?: string;
-  fundingFeeRate?: number;
-  currentFundingRateGranularity?: number;
-  fundingRateGranularity?: number;
-  nextFundingRateDateTime?: number;
-  turnoverOf24h?: number;
-  markPrice?: number;
-}
-interface KuCoinResponse<T> { code: string; data: T }
+interface WeexFunding { symbol: string; fundingRate?: string; collectCycle?: number; timestamp?: number }
+interface WeexTicker { symbol: string; markPrice?: string; volume_24h?: string }
 
-async function kucoin(env: MarketEnv): Promise<FundingQuote[]> {
-  const payload = await jsonFetch<KuCoinResponse<KuCoinContract[]>>("KuCoin", "https://api-futures.kucoin.com/api/v1/contracts/active", env);
-  if (payload.code !== "200000") throw new Error(`KuCoin ${payload.code}`);
-  return payload.data.flatMap((item) => {
-    const rate = finiteNumber(item.fundingFeeRate);
-    const intervalMs = positiveNumber(item.currentFundingRateGranularity) ?? positiveNumber(item.fundingRateGranularity);
-    if (item.quoteCurrency !== "USDT" || item.settleCurrency !== "USDT" || item.status !== "Open" || rate === null || intervalMs === null) return [];
-    const rawSymbol = item.displayBaseCurrency || item.symbol.replace(/USDTM$/, "");
-    const symbol = rawSymbol === "XBT" ? "BTC" : rawSymbol;
-    return [quote("KuCoin", symbol, rate, intervalMs / 3_600_000, positiveNumber(item.markPrice), positiveNumber(item.turnoverOf24h), finiteNumber(item.nextFundingRateDateTime), "exchange_api")];
-  });
-}
-
-interface MexcTicker { symbol: string; fairPrice?: number; fundingRate?: number; amount24?: number }
-interface MexcResponse<T> { success: boolean; code: number; data: T }
-
-async function mexc(env: MarketEnv): Promise<FundingQuote[]> {
-  const payload = await jsonFetch<MexcResponse<MexcTicker[]>>("MEXC", "https://contract.mexc.com/api/v1/contract/ticker", env);
-  if (!payload.success) throw new Error(`MEXC ${payload.code}`);
-  return payload.data.flatMap((item) => {
+async function weex(env: MarketEnv): Promise<FundingQuote[]> {
+  const [funding, tickers] = await Promise.all([
+    jsonFetch<WeexFunding[]>("WEEX", "https://api-contract.weex.com/capi/v2/market/currentFundRate", env),
+    jsonFetch<WeexTicker[]>("WEEX", "https://api-contract.weex.com/capi/v2/market/tickers", env),
+  ]);
+  const tickerMap = new Map(tickers.map((item) => [item.symbol.toLowerCase(), item]));
+  return funding.flatMap((item) => {
+    const raw = item.symbol.toLowerCase();
     const rate = finiteNumber(item.fundingRate);
-    if (!item.symbol.endsWith("_USDT") || rate === null) return [];
-    return [quote("MEXC", item.symbol.replace(/_USDT$/, ""), rate, 8, positiveNumber(item.fairPrice), positiveNumber(item.amount24), nextBoundary(8), "protocol_rule")];
+    const cycleMinutes = positiveNumber(item.collectCycle);
+    if (!raw.startsWith("cmt_") || !raw.endsWith("usdt") || rate === null || cycleMinutes === null) return [];
+    const ticker = tickerMap.get(raw);
+    return [quote("WEEX", raw.slice(4, -4).toUpperCase(), rate, cycleMinutes / 60, positiveNumber(ticker?.markPrice), positiveNumber(ticker?.volume_24h), finiteNumber(item.timestamp), "exchange_api")];
   });
 }
 
-interface PhemexTicker { symbol: string; markRp?: string; fundingRateRr?: string; turnoverRv?: string }
-interface PhemexResponse { error: unknown; result: PhemexTicker[] }
+interface HtxFunding { funding_rate?: string; contract_code: string; fee_asset?: string; funding_time?: string; next_funding_time?: string | null }
+interface HtxContract { contract_code: string; contract_status?: number; settlement_period?: string }
+interface HtxTicker { contract_code: string; close?: string; vol?: string }
+interface HtxResponse<T> { status: string; err_msg?: string; data?: T; ticks?: T }
 
-async function phemex(env: MarketEnv): Promise<FundingQuote[]> {
-  const payload = await jsonFetch<PhemexResponse>("Phemex", "https://api.phemex.com/md/v3/ticker/24hr/all", env);
-  if (payload.error) throw new Error("Phemex 返回错误");
-  return payload.result.flatMap((item) => {
-    const rate = finiteNumber(item.fundingRateRr);
-    if (!item.symbol.endsWith("USDT") || rate === null) return [];
-    return [quote("Phemex", item.symbol.slice(0, -4), rate, 8, positiveNumber(item.markRp), positiveNumber(item.turnoverRv), nextBoundary(8), "protocol_rule")];
+async function htx(env: MarketEnv): Promise<FundingQuote[]> {
+  const [funding, contracts, tickers] = await Promise.all([
+    jsonFetch<HtxResponse<HtxFunding[]>>("HTX", "https://api.hbdm.com/linear-swap-api/v1/swap_batch_funding_rate", env),
+    jsonFetch<HtxResponse<HtxContract[]>>("HTX", "https://api.hbdm.com/linear-swap-api/v1/swap_contract_info", env),
+    jsonFetch<HtxResponse<HtxTicker[]>>("HTX", "https://api.hbdm.com/v2/linear-swap-ex/market/detail/batch_merged", env),
+  ]);
+  if (funding.status !== "ok" || contracts.status !== "ok" || tickers.status !== "ok") throw new Error(funding.err_msg || contracts.err_msg || tickers.err_msg || "HTX 返回错误");
+  const contractMap = new Map((contracts.data ?? []).map((item) => [item.contract_code, item]));
+  const tickerMap = new Map((tickers.ticks ?? []).map((item) => [item.contract_code, item]));
+  return (funding.data ?? []).flatMap((item) => {
+    const contract = contractMap.get(item.contract_code);
+    const ticker = tickerMap.get(item.contract_code);
+    const rate = finiteNumber(item.funding_rate);
+    const interval = positiveNumber(contract?.settlement_period);
+    if (!item.contract_code.endsWith("-USDT") || item.fee_asset !== "USDT" || contract?.contract_status !== 1 || rate === null || interval === null) return [];
+    return [quote("HTX", item.contract_code.slice(0, -5), rate, interval, positiveNumber(ticker?.close), positiveNumber(ticker?.vol), finiteNumber(item.next_funding_time) ?? finiteNumber(item.funding_time), "exchange_api")];
+  });
+}
+
+interface CoinbaseInstrument {
+  symbol: string;
+  type?: string;
+  base_asset_name?: string;
+  quote_asset_name?: string;
+  funding_interval?: string | number;
+  trading_state?: string;
+  notional_24hr?: string | number;
+  quote?: { mark_price?: string | number; predicted_funding?: string | number; timestamp?: string };
+}
+
+async function coinbase(env: MarketEnv): Promise<FundingQuote[]> {
+  const instruments = await jsonFetch<CoinbaseInstrument[]>("Coinbase", "https://api.international.coinbase.com/api/v1/instruments", env);
+  return instruments.flatMap((item) => {
+    const rate = finiteNumber(item.quote?.predicted_funding);
+    const intervalNs = positiveNumber(item.funding_interval);
+    if (item.type !== "PERP" || item.trading_state !== "TRADING" || item.quote_asset_name !== "USDC" || !item.base_asset_name || rate === null || intervalNs === null) return [];
+    const intervalHours = intervalNs / 3_600_000_000_000;
+    const timestamp = item.quote?.timestamp ? Date.parse(item.quote.timestamp) : Number.NaN;
+    return [quote("Coinbase", item.base_asset_name, rate, intervalHours, positiveNumber(item.quote?.mark_price), positiveNumber(item.notional_24hr), Number.isFinite(timestamp) ? timestamp + intervalHours * 3_600_000 : nextBoundary(intervalHours), "exchange_api", "USDC")];
   });
 }
 
 export async function fetchAllExchanges(env: MarketEnv): Promise<{ quotes: FundingQuote[]; health: ExchangeHealth[] }> {
   const loaders: Array<() => Promise<FetchResult>> = [
     () => measured("Binance", () => binance(env)),
-    () => measured("Bybit", () => bybit(env)),
     () => measured("OKX", () => okx(env)),
-    () => measured("Bitget", () => bitget(env)),
+    () => measured("Bybit", () => bybit(env)),
     () => measured("Hyperliquid", () => hyperliquid(env)),
     () => measured("Gate.io", () => gate(env)),
-    () => measured("KuCoin", () => kucoin(env)),
-    () => measured("MEXC", () => mexc(env)),
-    () => measured("Phemex", () => phemex(env)),
+    () => measured("Bitget", () => bitget(env)),
+    () => measured("WEEX", () => weex(env)),
+    () => measured("HTX", () => htx(env)),
+    () => measured("Coinbase", () => coinbase(env)),
   ];
   const results: FetchResult[] = [];
   for (let index = 0; index < loaders.length; index += 2) {

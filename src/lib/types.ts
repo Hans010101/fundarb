@@ -5,13 +5,14 @@ export type ExchangeName =
   | "Bitget"
   | "Hyperliquid"
   | "Gate.io"
-  | "KuCoin"
-  | "MEXC"
-  | "Phemex";
+  | "WEEX"
+  | "HTX"
+  | "Coinbase";
 
 export interface FundingQuote {
   exchange: ExchangeName;
   symbol: string;
+  quoteAsset: "USDT" | "USDC";
   rate: number;
   intervalHours: number;
   rate8h: number;
@@ -34,6 +35,8 @@ export interface Opportunity {
   symbol: string;
   longExchange: ExchangeName;
   shortExchange: ExchangeName;
+  longQuoteAsset: "USDT" | "USDC";
+  shortQuoteAsset: "USDT" | "USDC";
   longRate8h: number;
   shortRate8h: number;
   spread8h: number;

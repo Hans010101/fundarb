@@ -1,5 +1,5 @@
 import type { ExecutionMode } from "../src/lib/admin-types";
-import { signOrder, type DecryptedConnection, type OrderLeg, type TradingEnvironment } from "./connectors";
+import { assertOrderAccepted, signOrder, type DecryptedConnection, type OrderLeg, type TradingEnvironment } from "./connectors";
 import { connectionById, relay, settingsMap } from "./control-plane";
 import { HttpError, json, readJson, requireAdmin } from "./http";
 
@@ -23,7 +23,7 @@ interface HedgeRow {
   long_quantity: string; short_quantity: string; notional_usd: string; hard_leg: "long" | "short"; state: string;
 }
 
-interface RelayExchangeResponse { orderId?: string; result?: { orderId?: string }; data?: Array<{ ordId?: string }> | { orderId?: string } }
+interface RelayExchangeResponse { orderId?: string | number; order_id?: string | number; result?: { orderId?: string | number }; data?: Array<{ ordId?: string }> | { orderId?: string | number; order_id_str?: string } }
 
 function validQuantity(value: string): boolean {
   return /^(?:0|[1-9]\d*)(?:\.\d{1,12})?$/.test(value) && Number(value) > 0;
@@ -35,6 +35,10 @@ function normalizedSymbol(value: string): string {
   return symbol;
 }
 
+function settlementAsset(connection: DecryptedConnection): "USDT" | "USDC" {
+  return connection.exchange === "Coinbase" || connection.exchange === "Hyperliquid" ? "USDC" : "USDT";
+}
+
 function clientOrderId(hedgeId: string, leg: "long" | "short", action: "open" | "close" | "rollback", sequence: number): string {
   return `fa-${hedgeId.slice(0, 8)}-${leg[0]}-${action[0]}-${String(sequence).padStart(2, "0")}`;
 }
@@ -42,10 +46,12 @@ function clientOrderId(hedgeId: string, leg: "long" | "short", action: "open" | 
 function exchangeOrderId(body: string): string | null {
   try {
     const parsed = JSON.parse(body) as RelayExchangeResponse;
-    if (typeof parsed.orderId === "string") return parsed.orderId;
-    if (typeof parsed.result?.orderId === "string") return parsed.result.orderId;
+    if (typeof parsed.orderId === "string" || typeof parsed.orderId === "number") return String(parsed.orderId);
+    if (typeof parsed.order_id === "string" || typeof parsed.order_id === "number") return String(parsed.order_id);
+    if (typeof parsed.result?.orderId === "string" || typeof parsed.result?.orderId === "number") return String(parsed.result.orderId);
     if (Array.isArray(parsed.data) && typeof parsed.data[0]?.ordId === "string") return parsed.data[0].ordId;
-    if (!Array.isArray(parsed.data) && typeof parsed.data?.orderId === "string") return parsed.data.orderId;
+    if (!Array.isArray(parsed.data) && (typeof parsed.data?.orderId === "string" || typeof parsed.data?.orderId === "number")) return String(parsed.data.orderId);
+    if (!Array.isArray(parsed.data) && typeof parsed.data?.order_id_str === "string") return parsed.data.order_id_str;
   } catch {
     return null;
   }
@@ -74,6 +80,14 @@ async function submitLeg(env: Env, hedgeId: string, connection: DecryptedConnect
       await env.DB.prepare("UPDATE orders SET status='REJECTED', error=?, raw_response=?, updated_at=? WHERE client_order_id=?")
         .bind(`HTTP ${response.status}`, response.body, Date.now(), leg.clientOrderId).run();
       return { ok: false, clientOrderId: leg.clientOrderId, error: `交易所拒绝：HTTP ${response.status}` };
+    }
+    try {
+      assertOrderAccepted(connection.exchange, response.body);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "交易所业务层拒绝委托";
+      await env.DB.prepare("UPDATE orders SET status='REJECTED', error=?, raw_response=?, updated_at=? WHERE client_order_id=?")
+        .bind(message.slice(0, 500), response.body, Date.now(), leg.clientOrderId).run();
+      return { ok: false, clientOrderId: leg.clientOrderId, error: `交易所拒绝：${message}` };
     }
     await env.DB.prepare("UPDATE orders SET status='ACKNOWLEDGED', exchange_order_id=?, raw_response=?, updated_at=? WHERE client_order_id=?")
       .bind(exchangeOrderId(response.body), response.body, Date.now(), leg.clientOrderId).run();
@@ -128,6 +142,7 @@ async function openHedge(request: Request, env: Env): Promise<Response> {
   if (body.longConnectionId === body.shortConnectionId) throw new HttpError(400, "多头和空头必须使用不同连接");
   const symbol = normalizedSymbol(body.symbol);
   const [longConnection, shortConnection] = await Promise.all([connectionById(env, body.longConnectionId), connectionById(env, body.shortConnectionId)]);
+  if (settlementAsset(longConnection) !== settlementAsset(shortConnection)) throw new HttpError(400, "双腿结算币不同（USDT/USDC），禁止提交真实套保");
   const requiredEnvironment: TradingEnvironment = mode === "live" ? "live" : "testnet";
   if (mode !== "paper" && (longConnection.environment !== requiredEnvironment || shortConnection.environment !== requiredEnvironment)) throw new HttpError(409, "连接环境与当前运行模式不一致");
   const enabledRows = await env.DB.prepare("SELECT id,enabled FROM exchange_connections WHERE id IN (?,?)").bind(body.longConnectionId, body.shortConnectionId).all<{ id: string; enabled: number }>();

@@ -36,7 +36,7 @@ describe("funding model", () => {
 
 describe("opportunity builder", () => {
   const makeQuote = (exchange: FundingQuote["exchange"], rate8h: number): FundingQuote => ({
-    exchange, symbol: "BTC", rate: rate8h, intervalHours: 8, rate8h, markPrice: 100, volume24h: 1_000_000_000,
+    exchange, symbol: "BTC", quoteAsset: "USDT", rate: rate8h, intervalHours: 8, rate8h, markPrice: 100, volume24h: 1_000_000_000,
     nextFundingTime: 2_000_000_000_000, intervalSource: "exchange_api",
   });
   const params: ScanParameters = { feeBpsPerLeg: 0, slippageBpsPerLeg: 0, safetyFactor: 2, holdingPeriods: 21, maxHoldingPeriods: 21, minEntryApr: 0.12, minVolumeUsd: 50_000_000 };
@@ -60,15 +60,23 @@ describe("opportunity builder", () => {
 
   it("rejects same-ticker routes when prices indicate different assets or contract units", () => {
     const first = makeQuote("Bybit", -0.0001);
-    const second = { ...makeQuote("MEXC", 0.0002), markPrice: 0.5 };
+    const second = { ...makeQuote("HTX", 0.0002), markPrice: 0.5 };
     expect(buildOpportunities([first, second], params)).toHaveLength(0);
   });
 
   it("blocks automatic execution when cross-exchange basis is unusually wide", () => {
     const first = makeQuote("Bybit", -0.0001);
-    const second = { ...makeQuote("MEXC", 0.0002), markPrice: 96 };
+    const second = { ...makeQuote("HTX", 0.0002), markPrice: 96 };
     const [result] = buildOpportunities([first, second], params);
     expect(result.executable).toBe(false);
     expect(result.reasons).toContain("跨所标记价格偏差过大，禁止自动交易");
+  });
+
+  it("blocks automatic execution across different settlement assets", () => {
+    const usdt = makeQuote("Bybit", -0.0001);
+    const usdc = { ...makeQuote("Coinbase", 0.0002), quoteAsset: "USDC" as const };
+    const [result] = buildOpportunities([usdt, usdc], params);
+    expect(result.executable).toBe(false);
+    expect(result.reasons).toContain("结算币不同（USDT/USDC），禁止自动交易");
   });
 });

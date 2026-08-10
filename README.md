@@ -1,6 +1,6 @@
 # FundArb
 
-个人使用的跨交易所永续合约套保交易终端。实时聚合 Binance、Bybit、OKX、Bitget、Hyperliquid、Gate.io、KuCoin、MEXC 与 Phemex 共 9 路 USDT 永续行情，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。
+个人使用的跨交易所永续合约套保交易终端。实时聚合 Binance、OKX、Bybit、Hyperliquid、Gate.io、Bitget、WEEX、HTX 与 Coinbase INTX 共 9 路永续行情，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。Hyperliquid 与 Coinbase 为 USDC 结算，其余来源为 USDT 结算；跨结算币路径禁止自动执行，后端也会拒绝提交。
 
 > 系统具备真实交易接口，但生产环境默认开启紧急停止，并关闭真实委托和主网许可。固定 IP 执行中继未配置前，后端会硬拒绝 Testnet/Live 请求。它不构成投资建议。
 
@@ -51,9 +51,9 @@ npm run deploy
 
 | 交易所 | 资金费行情 | 账户验权与真实委托 |
 | --- | --- | --- |
-| Binance / Bybit / OKX / Bitget | 是 | 是 |
-| Gate.io / KuCoin | 是 | 是 |
-| Hyperliquid / MEXC / Phemex | 是 | 暂未开放 |
+| Binance / OKX / Bybit / Bitget | 是 | 是 |
+| Hyperliquid / Gate.io / WEEX | 是 | 是 |
+| HTX / Coinbase INTX | 是 | 是 |
 
 行情接口会逐路显示在线状态、合约数量与上游错误，不会用静态模拟数据掩盖故障。Cloudflare 边缘出口可能被个别交易所的 WAF 或共享 IP 限流；`EXECUTION_RELAY_URL` 配置后，行情请求会在直接访问失败时自动回退到同一个固定 IP 白名单中继。
 

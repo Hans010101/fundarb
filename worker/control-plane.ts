@@ -1,5 +1,5 @@
 import type { ControlPlaneStatus, ExecutionMode } from "../src/lib/admin-types";
-import { SUPPORTED_EXCHANGES, type DecryptedConnection, type TradingEnvironment, type TradingExchange, signVerification } from "./connectors";
+import { SUPPORTED_EXCHANGES, assertVerificationAccepted, type DecryptedConnection, type TradingEnvironment, type TradingExchange, signVerification } from "./connectors";
 import { HttpError, json, readJson, requireAdmin, type AdminIdentity } from "./http";
 import { credentialFingerprint, decryptCredential, encryptCredential } from "./vault";
 
@@ -122,10 +122,10 @@ async function saveConnection(request: Request, env: Env): Promise<Response> {
   const body = await readJson<SaveConnectionBody>(request);
   if (!SUPPORTED_EXCHANGES.includes(body.exchange as TradingExchange)) throw new HttpError(400, "暂不支持该交易所的真实委托");
   if (body.environment !== "testnet" && body.environment !== "live") throw new HttpError(400, "账户环境无效");
-  if (body.exchange === "KuCoin" && body.environment !== "live") throw new HttpError(400, "KuCoin 当前仅支持主网 API");
+  if (body.exchange === "HTX" && body.environment !== "live") throw new HttpError(400, "HTX 当前仅支持主网 API");
   if (!body.label?.trim() || body.label.trim().length > 40) throw new HttpError(400, "连接名称应为 1–40 个字符");
   if (body.apiKey?.length < 8 || body.apiSecret?.length < 8) throw new HttpError(400, "API Key 或 Secret 格式无效");
-  if (["OKX", "Bitget", "KuCoin"].includes(body.exchange) && !body.passphrase) throw new HttpError(400, `${body.exchange} 需要 Passphrase`);
+  if (["OKX", "Bitget", "WEEX", "Coinbase"].includes(body.exchange) && !body.passphrase) throw new HttpError(400, `${body.exchange} 需要 Passphrase`);
   const id = body.id ?? crypto.randomUUID();
   const now = Date.now();
   await env.DB.prepare(`INSERT INTO exchange_connections
@@ -159,6 +159,7 @@ async function verifyConnection(env: Env, id: string): Promise<Response> {
   try {
     const result = await relay(env, await signVerification(connection));
     if (!result.ok) throw new Error(`中继返回 HTTP ${result.status}: ${result.body.slice(0, 300)}`);
+    assertVerificationAccepted(connection.exchange, result.body);
     await env.DB.prepare("UPDATE exchange_connections SET verification_status='verified', last_verified_at=?, last_error=NULL, updated_at=? WHERE id=?")
       .bind(Date.now(), Date.now(), id).run();
     await audit(env, "connection_verified", "INFO", { id, exchange: connection.exchange });

@@ -15,19 +15,21 @@ const ALLOWLIST = new Map([
   ["api-testnet.bybit.com", new Map([["POST", ["/v5/order/create"]], ["GET", ["/v5/account/wallet-balance"]]])],
   ["www.okx.com", new Map([["POST", ["/api/v5/trade/order"]], ["GET", ["/api/v5/account/balance", "/api/v5/market/tickers", "/api/v5/public/funding-rate"]]])],
   ["api.bitget.com", new Map([["POST", ["/api/v2/mix/order/place-order"]], ["GET", ["/api/v2/mix/account/accounts", "/api/v3/market/current-fund-rate", "/api/v3/market/tickers"]]])],
-  ["api.hyperliquid.xyz", new Map([["POST", ["/info"]]])],
+  ["api.hyperliquid.xyz", new Map([["POST", ["/info", "/exchange"]]])],
+  ["api.hyperliquid-testnet.xyz", new Map([["POST", ["/info", "/exchange"]]])],
   ["api.gateio.ws", new Map([["POST", ["/api/v4/futures/usdt/orders"]], ["GET", ["/api/v4/futures/usdt/accounts", "/api/v4/futures/usdt/contracts", "/api/v4/futures/usdt/tickers"]]])],
   ["fx-api-testnet.gateio.ws", new Map([["POST", ["/api/v4/futures/usdt/orders"]], ["GET", ["/api/v4/futures/usdt/accounts"]]])],
-  ["api-futures.kucoin.com", new Map([["POST", ["/api/v1/orders"]], ["GET", ["/api/v1/account-overview", "/api/v1/contracts/active"]]])],
-  ["contract.mexc.com", new Map([["GET", ["/api/v1/contract/ticker"]]])],
-  ["api.phemex.com", new Map([["GET", ["/md/v3/ticker/24hr/all"]]])],
+  ["api-contract.weex.com", new Map([["POST", ["/capi/v3/order", "/capi/v3/sim/order"]], ["GET", ["/capi/v3/account/balance", "/capi/v3/sim/balance", "/capi/v2/market/currentFundRate", "/capi/v2/market/tickers"]]])],
+  ["api.hbdm.com", new Map([["POST", ["/linear-swap-api/v1/swap_order", "/linear-swap-api/v1/swap_account_info"]], ["GET", ["/linear-swap-api/v1/swap_batch_funding_rate", "/linear-swap-api/v1/swap_contract_info", "/v2/linear-swap-ex/market/detail/batch_merged"]]])],
+  ["api.international.coinbase.com", new Map([["POST", ["/api/v1/orders"]], ["GET", ["/api/v1/portfolios", "/api/v1/instruments"]]])],
+  ["api-n5e1.coinbase.com", new Map([["POST", ["/api/v1/orders"]], ["GET", ["/api/v1/portfolios"]]])],
 ]);
 
 const HEADER_ALLOWLIST = new Set([
   "accept", "content-type", "x-mbx-apikey", "x-bapi-api-key", "x-bapi-timestamp", "x-bapi-recv-window", "x-bapi-sign",
   "ok-access-key", "ok-access-timestamp", "ok-access-passphrase", "ok-access-sign", "x-simulated-trading",
   "access-key", "access-timestamp", "access-passphrase", "access-sign", "locale",
-  "key", "timestamp", "sign", "kc-api-key", "kc-api-sign", "kc-api-timestamp", "kc-api-passphrase", "kc-api-key-version",
+  "key", "timestamp", "sign", "cb-access-key", "cb-access-sign", "cb-access-timestamp", "cb-access-passphrase",
 ]);
 
 function safeEqual(left, right) {

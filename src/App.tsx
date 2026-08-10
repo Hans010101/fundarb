@@ -9,10 +9,10 @@ import type { ExchangeName, Opportunity, ScanResponse } from "./lib/types";
 
 type View = "overview" | "opportunities" | "trade" | "connections" | "risk";
 
-const TRADING_EXCHANGES: ExchangeName[] = ["Binance", "Bybit", "OKX", "Bitget", "Gate.io", "KuCoin"];
+const TRADING_EXCHANGES: ExchangeName[] = ["Binance", "OKX", "Bybit", "Hyperliquid", "Gate.io", "Bitget", "WEEX", "HTX", "Coinbase"];
 const EXCHANGE_CN: Record<string, string> = {
   Binance: "币安", Bybit: "Bybit", OKX: "OKX", Bitget: "Bitget", Hyperliquid: "Hyperliquid",
-  "Gate.io": "Gate.io", KuCoin: "KuCoin", MEXC: "MEXC", Phemex: "Phemex",
+  "Gate.io": "Gate.io", WEEX: "WEEX", HTX: "HTX", Coinbase: "Coinbase",
 };
 const DEFAULT_QUERY = { feeBps: 5.5, slippageBps: 2, periods: 21, minApr: 12, minVolume: 50 };
 
@@ -57,14 +57,14 @@ function OpportunityTable({ data, onTrade }: { data: ScanResponse | null; onTrad
         <table>
           <thead><tr><th>合约</th><th>双腿路径</th><th>8h 费率差</th><th>成本后 APR</th><th>预计回本</th><th>较弱侧流动性</th><th>评估</th><th /></tr></thead>
           <tbody>{rows.slice(0, 60).map((item) => <tr key={`${item.symbol}-${item.longExchange}-${item.shortExchange}`}>
-            <td><strong className="symbol">{item.symbol}</strong><small>USDT 永续</small></td>
+            <td><strong className="symbol">{item.symbol}</strong><small>{item.longQuoteAsset === item.shortQuoteAsset ? item.longQuoteAsset : `${item.longQuoteAsset}/${item.shortQuoteAsset}`} 永续</small></td>
             <td><div className="route"><span><ExchangeBadge name={item.longExchange} />{EXCHANGE_CN[item.longExchange]} <b className="long"><ArrowUpRight size={15} />做多</b></span><span><ExchangeBadge name={item.shortExchange} />{EXCHANGE_CN[item.shortExchange]} <b className="short"><ArrowDownLeft size={15} />做空</b></span></div></td>
             <td className="number"><strong>{rate(item.spread8h)}</strong><small>{rate(item.longRate8h)} → {rate(item.shortRate8h)}</small></td>
             <td className="number"><strong className={item.expectedNetApr >= 0.12 ? "red" : ""}>{pct(item.expectedNetApr, 1)}</strong><small>持有 {data?.params.holdingPeriods ?? 21} 期</small></td>
             <td className="number">{item.minHoldingPeriods} 期<small>约 {Math.ceil(item.minHoldingPeriods / 3)} 天</small></td>
             <td className="number">{money(item.liquidityUsd)}</td>
             <td><span className={`result-tag ${item.executable ? "qualified" : "watch"}`}>{item.executable ? "达标" : "观察"}</span></td>
-            <td><button className="row-action" onClick={() => onTrade(item)}>创建交易</button></td>
+            <td><button className="row-action" onClick={() => onTrade(item)} disabled={!item.executable}>{item.executable ? "创建交易" : "仅观察"}</button></td>
           </tr>)}</tbody>
         </table>
         {rows.length === 0 && <div className="empty-state">当前筛选条件下没有机会。</div>}
@@ -90,19 +90,21 @@ function ConnectionsView({ status, request, refresh }: { status: ControlPlaneSta
     } catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); } finally { setBusy(false); }
   }
   async function action(path: string, init?: RequestInit) { setBusy(true); setError(""); try { await request(path, init); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "操作失败"); } finally { setBusy(false); } }
-  const needsPassphrase = ["OKX", "Bitget", "KuCoin"].includes(form.exchange);
-  useEffect(() => { if (form.exchange === "KuCoin" && form.environment !== "live") setForm((current) => ({ ...current, environment: "live" })); }, [form.exchange, form.environment]);
+  const needsPassphrase = ["OKX", "Bitget", "WEEX", "Coinbase"].includes(form.exchange);
+  const liveOnly = form.exchange === "HTX";
+  const hyperliquid = form.exchange === "Hyperliquid";
+  useEffect(() => { if (liveOnly && form.environment !== "live") setForm((current) => ({ ...current, environment: "live" })); }, [form.environment, liveOnly]);
   return <div className="two-column">
-    <section className="panel form-panel"><div className="panel-heading"><div><p className="kicker">API 保险箱</p><h2>添加交易所账户</h2><span>6 家交易所支持验权与双腿下单；建议使用独立子账户、禁提现并绑定固定 IP</span></div><KeyRound className="heading-icon" /></div>
+    <section className="panel form-panel"><div className="panel-heading"><div><p className="kicker">API 保险箱</p><h2>添加交易所账户</h2><span>9 家交易所均已建立验权与下单适配；建议使用独立子账户、禁提现并绑定固定 IP</span></div><KeyRound className="heading-icon" /></div>
       <div className="form-grid">
         <label>交易所<select value={form.exchange} onChange={(event) => setForm({ ...form, exchange: event.target.value })}>{TRADING_EXCHANGES.map((item) => <option key={item} value={item}>{EXCHANGE_CN[item]}</option>)}</select></label>
-        <label>账户环境<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })} disabled={form.exchange === "KuCoin"}>{form.exchange !== "KuCoin" && <option value="testnet">Testnet 测试网</option>}<option value="live">Live 主网</option></select></label>
+        <label>账户环境<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })} disabled={liveOnly}>{!liveOnly && <option value="testnet">Testnet 测试网</option>}<option value="live">Live 主网</option></select></label>
         <label className="wide">连接名称<input value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder="例如：币安套保子账户" /></label>
-        <label className="wide">API Key<input type="password" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} autoComplete="off" /></label>
-        <label className="wide">API Secret<input type="password" value={form.apiSecret} onChange={(event) => setForm({ ...form, apiSecret: event.target.value })} autoComplete="off" /></label>
+        <label className="wide">{hyperliquid ? "Agent Wallet 地址" : "API Key"}<input type="password" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} autoComplete="off" /></label>
+        <label className="wide">{hyperliquid ? "Agent Wallet 私钥" : "API Secret"}<input type="password" value={form.apiSecret} onChange={(event) => setForm({ ...form, apiSecret: event.target.value })} autoComplete="off" /></label>
         {needsPassphrase && <label className="wide">Passphrase<input type="password" value={form.passphrase} onChange={(event) => setForm({ ...form, passphrase: event.target.value })} autoComplete="off" /></label>}
       </div>
-      <div className="connector-coverage"><p><strong>可真实交易</strong><span>币安、Bybit、OKX、Bitget、Gate.io、KuCoin</span></p><p><strong>行情监控</strong><span>另含 Hyperliquid、MEXC、Phemex；这些平台暂不开放账户保存与自动下单</span></p></div>
+      <div className="connector-coverage"><p><strong>接入范围</strong><span>币安、OKX、Bybit、Hyperliquid、Gate.io、Bitget、WEEX、HTX、Coinbase</span></p><p><strong>重要差异</strong><span>Hyperliquid 与 Coinbase INTX 为 USDC 结算；跨 USDT/USDC 路径只观察，后端也会拒绝提交。Hyperliquid 请使用独立 Agent Wallet。</span></p></div>
       <div className="security-note"><ShieldCheck size={19} /><span>AES-256-GCM 加密 · 主密钥仅存在 Cloudflare Secret · D1 不保存明文 · 每次加密使用独立随机 IV</span></div>
       {error && <p className="form-error">{error}</p>}{message && <p className="form-success">{message}</p>}
       <button className="primary-button full" onClick={save} disabled={busy}>保存到加密保险箱</button>

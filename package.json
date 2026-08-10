@@ -16,11 +16,13 @@
     "cf-types": "wrangler types worker-configuration.d.ts"
   },
   "dependencies": {
+    "@nktkas/hyperliquid": "^0.33.3",
     "@vitejs/plugin-react": "latest",
     "jose": "^6.2.8",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "viem": "^2.55.11",
     "vite": "latest"
   },
   "devDependencies": {

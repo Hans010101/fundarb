@@ -8,6 +8,11 @@
 - Bybit Linear：账户验证、市场委托
 - OKX USDT Swap：账户验证、市场委托
 - Bitget USDT Futures：账户验证、市场委托
+- Hyperliquid：Agent Wallet 验权、IOC 委托
+- Gate.io USDT Futures：账户验证、市场委托
+- WEEX Futures V3：账户验证、市场委托
+- HTX USDT Swap：账户验证、最优五档委托
+- Coinbase INTX：账户验证、USDC 永续市场委托
 
 生产运行：
 

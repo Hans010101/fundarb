@@ -65,6 +65,7 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
         if (minPeriods > params.maxHoldingPeriods) reasons.push(`回本需 ${minPeriods} 期，超过上限`);
         if (netApr < params.minEntryApr) reasons.push("成本后年化低于门槛");
         if (grossApr > 1) reasons.push("极端费率：需历史稳定性与盘口复核");
+        if (longQuote.quoteAsset !== shortQuote.quoteAsset) reasons.push(`结算币不同（${longQuote.quoteAsset}/${shortQuote.quoteAsset}），禁止自动交易`);
         if (liquidity === null) reasons.push("缺少双边 24h 流动性数据");
         else if (liquidity < params.minVolumeUsd) reasons.push("双边流动性低于门槛");
 
@@ -80,6 +81,8 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
           symbol,
           longExchange: longQuote.exchange,
           shortExchange: shortQuote.exchange,
+          longQuoteAsset: longQuote.quoteAsset,
+          shortQuoteAsset: shortQuote.quoteAsset,
           longRate8h: longQuote.rate8h,
           shortRate8h: shortQuote.rate8h,
           spread8h: spread,
