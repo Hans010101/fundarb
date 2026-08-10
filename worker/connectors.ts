@@ -174,6 +174,7 @@ async function signedBitget(connection: DecryptedConnection, leg: OrderLeg): Pro
       "ACCESS-KEY": connection.apiKey, "ACCESS-TIMESTAMP": timestamp, "ACCESS-PASSPHRASE": connection.passphrase,
       "ACCESS-SIGN": await hmac(connection.apiSecret, `${timestamp}POST${path}${body}`, "base64"),
       "content-type": "application/json", locale: "zh-CN",
+      ...(connection.environment === "testnet" ? { paptrading: "1" } : {}),
     },
   };
 }
@@ -374,7 +375,7 @@ export async function signVerification(connection: DecryptedConnection): Promise
     if (!connection.passphrase) throw new HttpError(400, "Bitget 连接缺少 Passphrase");
     const path = "/api/v2/mix/account/accounts";
     const query = "productType=USDT-FUTURES";
-    return { requestId: crypto.randomUUID(), exchange: "Bitget", method: "GET", url: `${baseUrl(connection)}${path}?${query}`, headers: { "ACCESS-KEY": connection.apiKey, "ACCESS-TIMESTAMP": timestampMs, "ACCESS-PASSPHRASE": connection.passphrase, "ACCESS-SIGN": await hmac(connection.apiSecret, `${timestampMs}GET${path}?${query}`, "base64"), locale: "zh-CN" }, body: null };
+    return { requestId: crypto.randomUUID(), exchange: "Bitget", method: "GET", url: `${baseUrl(connection)}${path}?${query}`, headers: { "ACCESS-KEY": connection.apiKey, "ACCESS-TIMESTAMP": timestampMs, "ACCESS-PASSPHRASE": connection.passphrase, "ACCESS-SIGN": await hmac(connection.apiSecret, `${timestampMs}GET${path}?${query}`, "base64"), locale: "zh-CN", ...(connection.environment === "testnet" ? { paptrading: "1" } : {}) }, body: null };
   }
   if (connection.exchange === "WEEX") {
     if (!connection.passphrase) throw new HttpError(400, "WEEX 连接缺少 Passphrase");

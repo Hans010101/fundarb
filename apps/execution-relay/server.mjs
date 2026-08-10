@@ -28,7 +28,7 @@ const ALLOWLIST = new Map([
 const HEADER_ALLOWLIST = new Set([
   "accept", "content-type", "x-mbx-apikey", "x-bapi-api-key", "x-bapi-timestamp", "x-bapi-recv-window", "x-bapi-sign",
   "ok-access-key", "ok-access-timestamp", "ok-access-passphrase", "ok-access-sign", "x-simulated-trading",
-  "access-key", "access-timestamp", "access-passphrase", "access-sign", "locale",
+  "access-key", "access-timestamp", "access-passphrase", "access-sign", "locale", "paptrading",
   "key", "timestamp", "sign", "cb-access-key", "cb-access-sign", "cb-access-timestamp", "cb-access-passphrase",
 ]);
 

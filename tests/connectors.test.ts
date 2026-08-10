@@ -25,6 +25,12 @@ describe("additional execution connectors", () => {
     expect(verification.url).toBe("https://api.gateio.ws/api/v4/futures/usdt/accounts");
   });
 
+  it("marks Bitget testnet requests as demo trading", async () => {
+    const demo = { ...connection("Bitget", "test-passphrase"), environment: "testnet" as const };
+    expect((await signOrder(demo, leg)).headers.paptrading).toBe("1");
+    expect((await signVerification(demo)).headers.paptrading).toBe("1");
+  });
+
   it("signs WEEX V3 market orders", async () => {
     const order = await signOrder(connection("WEEX", "test-passphrase"), leg);
     const body = JSON.parse(order.body ?? "{}") as { symbol: string; side: string; positionSide: string; type: string };
