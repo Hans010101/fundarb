@@ -143,6 +143,7 @@ async function openHedge(request: Request, env: Env): Promise<Response> {
   if (body.longConnectionId === body.shortConnectionId) throw new HttpError(400, "多头和空头必须使用不同连接");
   const symbol = normalizedSymbol(body.symbol);
   const [longConnection, shortConnection] = await Promise.all([connectionById(env, body.longConnectionId), connectionById(env, body.shortConnectionId)]);
+  if (longConnection.exchange === shortConnection.exchange) throw new HttpError(400, "多头和空头必须使用不同交易所");
   if (settlementAsset(longConnection) !== settlementAsset(shortConnection)) throw new HttpError(400, "双腿结算币不同（USDT/USDC），禁止提交真实套保");
   const requiredEnvironment: TradingEnvironment = mode === "live" ? "live" : "testnet";
   if (mode !== "paper" && (longConnection.environment !== requiredEnvironment || shortConnection.environment !== requiredEnvironment)) throw new HttpError(409, "连接环境与当前运行模式不一致");

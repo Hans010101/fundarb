@@ -51,6 +51,10 @@ function bool(value: string | undefined, fallback: boolean): boolean {
   return value === undefined ? fallback : value === "true";
 }
 
+export function hasExecutionPair(rows: Array<{ exchange: string }>): boolean {
+  return new Set(rows.map((row) => row.exchange)).size >= 2;
+}
+
 export async function settingsMap(db: D1Database): Promise<Map<string, string>> {
   const rows = await db.prepare("SELECT key, value FROM platform_settings").all<{ key: string; value: string }>();
   return new Map((rows.results ?? []).map((row) => [row.key, row.value]));
@@ -183,6 +187,22 @@ async function updateSettings(request: Request, env: Env): Promise<Response> {
   if (body.mode && !["paper", "testnet", "live"].includes(body.mode)) throw new HttpError(400, "运行模式无效");
   if (body.maxOrderNotionalUsd !== undefined && (!Number.isFinite(body.maxOrderNotionalUsd) || body.maxOrderNotionalUsd < 10 || body.maxOrderNotionalUsd > 10_000)) throw new HttpError(400, "单组名义应在 10–10,000 USDT");
   if (body.maxEffectiveLeverage !== undefined && (!Number.isFinite(body.maxEffectiveLeverage) || body.maxEffectiveLeverage < 1 || body.maxEffectiveLeverage > 3)) throw new HttpError(400, "有效杠杆硬上限为 3 倍");
+  const current = await settingsMap(env.DB);
+  const nextMode = body.mode ?? (current.get("mode") ?? "paper") as ExecutionMode;
+  const nextEmergencyStop = body.executionEmergencyStop ?? bool(current.get("execution_emergency_stop"), true);
+  const nextOrderSubmission = body.orderSubmissionEnabled ?? bool(current.get("order_submission_enabled"), false);
+  const nextLiveEnabled = body.liveEnabled ?? bool(current.get("live_enabled"), false);
+  const needsExecutionPair = nextMode !== "paper" && !nextEmergencyStop && nextOrderSubmission;
+  if (needsExecutionPair || nextLiveEnabled) {
+    const [transport, connections] = await Promise.all([
+      resolveRelayTransport(env),
+      env.DB.prepare("SELECT exchange,environment FROM exchange_connections WHERE enabled=1 AND verification_status='verified'").all<{ exchange: string; environment: TradingEnvironment }>(),
+    ]);
+    if (!relayAvailable(transport)) throw new HttpError(409, "请先连接固定 IP 执行中继");
+    const rows = connections.results ?? [];
+    if (nextLiveEnabled && !hasExecutionPair(rows.filter((row) => row.environment === "live"))) throw new HttpError(409, "主网开闸前需要两家不同交易所的已验权、已启用主网账户");
+    if (needsExecutionPair && !hasExecutionPair(rows.filter((row) => row.environment === nextMode))) throw new HttpError(409, `${nextMode === "live" ? "主网" : "测试网"}执行前需要两家不同交易所的已验权、已启用账户`);
+  }
   const entries: Array<[string, string]> = [];
   if (body.mode) entries.push(["mode", body.mode]);
   if (body.executionEmergencyStop !== undefined) entries.push(["execution_emergency_stop", String(body.executionEmergencyStop)]);
