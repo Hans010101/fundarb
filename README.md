@@ -1,6 +1,6 @@
 # FundArb
 
-个人使用的跨交易所永续合约套保交易终端。实时聚合 Binance、OKX、Bybit、Hyperliquid、Gate.io、Bitget、WEEX、HTX 与 Coinbase INTX 共 9 路永续行情，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。Hyperliquid 与 Coinbase 为 USDC 结算，其余来源为 USDT 结算；跨结算币路径禁止自动执行，后端也会拒绝提交。
+FundArb 跨所套利交易终端。实时聚合 Binance、OKX、Bybit、Hyperliquid、Gate.io、Bitget、WEEX、HTX 与 Coinbase INTX 共 9 路永续行情，按实际结算周期统一到 8 小时；同时提供加密账户保险箱、Paper/Testnet/Live 三种模式、双腿开平仓状态机和三道交易总闸。Hyperliquid 与 Coinbase 为 USDC 结算，其余来源为 USDT 结算；跨结算币路径禁止自动执行，后端也会拒绝提交。
 
 > 系统具备真实交易接口，但生产环境默认开启紧急停止，并关闭真实委托和主网许可。固定 IP 执行中继未配置前，后端会硬拒绝 Testnet/Live 请求。它不构成投资建议。
 
@@ -41,7 +41,7 @@ npm run deploy
 - `GET /api/health`：服务状态与执行总闸。
 - `GET /api/scan`：实时机会矩阵。
 - 查询参数：`feeBps`、`slippageBps`、`periods`、`maxPeriods`、`minApr`、`minVolume`。
-- `GET /api/admin/status`：账户、模式、总闸与套保任务（需通过 Cloudflare Access 邮箱身份校验）。
+- `GET /api/admin/status`：账户、模式、总闸与套利任务（需通过 Cloudflare Access 邮箱身份校验）。
 - `POST /api/admin/connections`：加密保存交易所 API 凭证。
 - `POST /api/admin/connections/:id/verify`：经固定 IP 中继执行账户验权。
 - `POST /api/admin/hedges`：创建 Paper/Testnet/Live 双腿委托。

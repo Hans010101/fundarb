@@ -144,7 +144,7 @@ async function openHedge(request: Request, env: Env): Promise<Response> {
   const symbol = normalizedSymbol(body.symbol);
   const [longConnection, shortConnection] = await Promise.all([connectionById(env, body.longConnectionId), connectionById(env, body.shortConnectionId)]);
   if (longConnection.exchange === shortConnection.exchange) throw new HttpError(400, "多头和空头必须使用不同交易所");
-  if (settlementAsset(longConnection) !== settlementAsset(shortConnection)) throw new HttpError(400, "双腿结算币不同（USDT/USDC），禁止提交真实套保");
+  if (settlementAsset(longConnection) !== settlementAsset(shortConnection)) throw new HttpError(400, "双腿结算币不同（USDT/USDC），禁止提交真实套利交易");
   const requiredEnvironment: TradingEnvironment = mode === "live" ? "live" : "testnet";
   if (mode !== "paper" && (longConnection.environment !== requiredEnvironment || shortConnection.environment !== requiredEnvironment)) throw new HttpError(409, "连接环境与当前运行模式不一致");
   const enabledRows = await env.DB.prepare("SELECT id,enabled FROM exchange_connections WHERE id IN (?,?)").bind(body.longConnectionId, body.shortConnectionId).all<{ id: string; enabled: number }>();
@@ -193,7 +193,7 @@ async function closeHedge(request: Request, env: Env, hedgeId: string): Promise<
   await requireAdmin(request, env);
   const body = await readJson<{ confirmation: string; liveConfirmation?: string }>(request);
   const row = await env.DB.prepare("SELECT * FROM hedge_intents WHERE id=?").bind(hedgeId).first<HedgeRow>();
-  if (!row) throw new HttpError(404, "套保头寸不存在");
+  if (!row) throw new HttpError(404, "套利头寸不存在");
   if (!["HEDGED", "SUBMITTED_UNCONFIRMED", "CLOSE_PARTIAL"].includes(row.state)) throw new HttpError(409, `当前状态 ${row.state} 不允许平仓`);
   await validateExecution(env, row.mode, Number(row.notional_usd), body.confirmation, body.liveConfirmation);
   const [longConnection, shortConnection] = await Promise.all([connectionById(env, row.long_connection_id), connectionById(env, row.short_connection_id)]);

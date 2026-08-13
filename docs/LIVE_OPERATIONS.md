@@ -36,7 +36,7 @@ Binance、Bitget 等平台可能从 Cloudflare 共享出口返回 WAF 403，OKX 
 
 ## 上线顺序
 
-1. Paper：保存两个连接，创建和关闭模拟套保，核对 D1 账本。
+1. Paper：保存两个连接，创建和关闭模拟套利交易，核对 D1 账本。
 2. Testnet：部署固定出口中继，添加测试网 API，验权并启用连接；解除紧急停止、打开真实委托许可，模式切换为 Testnet。
    Binance 与 OKX 账户需使用单向/净持仓模式，Bitget 需使用 one-way mode；当前下单器以 reduce-only 保护平仓，尚未为双向持仓模式生成 `positionSide` / `posSide` / `tradeSide`。
 3. 故障演练：分别验证第一腿拒绝、第二腿拒绝、超时状态不明、回滚失败、部分平仓和 Worker 重启。
