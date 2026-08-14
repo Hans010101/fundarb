@@ -1,5 +1,5 @@
 import { normalizeFunding } from "../src/lib/funding";
-import type { ExchangeHealth, ExchangeName, FundingQuote } from "../src/lib/types";
+import type { ExchangeHealth, ExchangeName, FundingQuote, SpotQuote } from "../src/lib/types";
 import type { RelayTransport } from "./relay";
 
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -100,6 +100,12 @@ function quote(
   quoteAsset: FundingQuote["quoteAsset"] = "USDT",
 ): FundingQuote {
   return { exchange, symbol, quoteAsset, rate, intervalHours, rate8h: normalizeFunding(rate, intervalHours), markPrice, volume24h, nextFundingTime, intervalSource };
+}
+
+function spotQuote(exchange: ExchangeName, symbol: string, price: unknown, volume24h: unknown): SpotQuote[] {
+  const parsedPrice = positiveNumber(price);
+  if (!symbol || parsedPrice === null) return [];
+  return [{ exchange, symbol, quoteAsset: "USDT", price: parsedPrice, volume24h: positiveNumber(volume24h) }];
 }
 
 async function measured(exchange: ExchangeName, loader: () => Promise<FundingQuote[]>): Promise<FetchResult> {
@@ -302,7 +308,42 @@ async function coinbase(env: MarketEnv): Promise<FundingQuote[]> {
   });
 }
 
-export async function fetchAllExchanges(env: MarketEnv): Promise<{ quotes: FundingQuote[]; health: ExchangeHealth[] }> {
+interface BinanceSpotTicker { symbol: string; lastPrice?: string; quoteVolume?: string }
+interface BybitSpotTicker { symbol: string; lastPrice?: string; turnover24h?: string }
+interface BybitSpotResponse { retCode: number; retMsg: string; result: { list: BybitSpotTicker[] } }
+interface BitgetSpotTicker { symbol: string; lastPr?: string; quoteVolume?: string }
+interface GateSpotTicker { currency_pair: string; last?: string; quote_volume?: string }
+
+async function binanceSpots(env: MarketEnv): Promise<SpotQuote[]> {
+  const rows = await jsonFetch<BinanceSpotTicker[]>("Binance", "https://api.binance.com/api/v3/ticker/24hr", env);
+  return rows.flatMap((item) => item.symbol.endsWith("USDT") ? spotQuote("Binance", item.symbol.slice(0, -4), item.lastPrice, item.quoteVolume) : []);
+}
+
+async function okxSpots(env: MarketEnv): Promise<SpotQuote[]> {
+  const payload = await jsonFetch<OkxResponse<OkxTicker[]>>("OKX", "https://www.okx.com/api/v5/market/tickers?instType=SPOT", env);
+  if (payload.code !== "0") throw new Error(payload.msg || `OKX ${payload.code}`);
+  return payload.data.flatMap((item) => item.instId.endsWith("-USDT") ? spotQuote("OKX", item.instId.slice(0, -5), item.last, item.volCcy24h) : []);
+}
+
+async function bybitSpots(env: MarketEnv): Promise<SpotQuote[]> {
+  const payload = await jsonFetch<BybitSpotResponse>("Bybit", "https://api.bybit.com/v5/market/tickers?category=spot", env);
+  if (payload.retCode !== 0) throw new Error(payload.retMsg || `Bybit ${payload.retCode}`);
+  return payload.result.list.flatMap((item) => item.symbol.endsWith("USDT") ? spotQuote("Bybit", item.symbol.slice(0, -4), item.lastPrice, item.turnover24h) : []);
+}
+
+async function bitgetSpots(env: MarketEnv): Promise<SpotQuote[]> {
+  const payload = await jsonFetch<BitgetResponse<BitgetSpotTicker[]>>("Bitget", "https://api.bitget.com/api/v2/spot/market/tickers", env);
+  if (payload.code !== "00000") throw new Error(payload.msg || `Bitget ${payload.code}`);
+  return payload.data.flatMap((item) => item.symbol.endsWith("USDT") ? spotQuote("Bitget", item.symbol.slice(0, -4), item.lastPr, item.quoteVolume) : []);
+}
+
+async function gateSpots(env: MarketEnv): Promise<SpotQuote[]> {
+  const rows = await jsonFetch<GateSpotTicker[]>("Gate.io", "https://api.gateio.ws/api/v4/spot/tickers", env);
+  return rows.flatMap((item) => item.currency_pair.endsWith("_USDT") ? spotQuote("Gate.io", item.currency_pair.slice(0, -5), item.last, item.quote_volume) : []);
+}
+
+export async function fetchAllExchanges(env: MarketEnv): Promise<{ quotes: FundingQuote[]; spotQuotes: SpotQuote[]; health: ExchangeHealth[] }> {
+  const spotPromise = Promise.all([binanceSpots, okxSpots, bybitSpots, bitgetSpots, gateSpots].map((load) => load(env).catch(() => [])));
   const loaders: Array<() => Promise<FetchResult>> = [
     () => measured("Binance", () => binance(env)),
     () => measured("OKX", () => okx(env)),
@@ -318,5 +359,5 @@ export async function fetchAllExchanges(env: MarketEnv): Promise<{ quotes: Fundi
   for (let index = 0; index < loaders.length; index += 2) {
     results.push(...await Promise.all(loaders.slice(index, index + 2).map((load) => load())));
   }
-  return { quotes: results.flatMap((result) => result.quotes), health: results.map((result) => result.health) };
+  return { quotes: results.flatMap((result) => result.quotes), spotQuotes: (await spotPromise).flat(), health: results.map((result) => result.health) };
 }

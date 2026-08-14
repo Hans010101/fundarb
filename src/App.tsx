@@ -5,7 +5,7 @@ import {
   ShieldCheck, SlidersHorizontal, Unplug, WalletCards, XCircle,
 } from "lucide-react";
 import type { ControlPlaneStatus, ExecutionMode, HedgeRecord, TradingConnection } from "./lib/admin-types";
-import type { ExchangeName, Opportunity, ScanResponse } from "./lib/types";
+import type { ExchangeName, Opportunity, ScanResponse, SpotPerpOpportunity } from "./lib/types";
 
 type View = "overview" | "opportunities" | "trade" | "connections" | "risk";
 
@@ -50,12 +50,12 @@ function OpportunityTable({ data, onTrade }: { data: ScanResponse | null; onTrad
   return (
     <section className="panel opportunity-panel">
       <div className="panel-heading">
-        <div><p className="kicker">实时资金费率</p><h2>跨交易所机会</h2><span>已统一到 8 小时，并扣除四腿手续费与滑点</span></div>
+        <div><p className="kicker">实时资金费率</p><h2>跨所双永续</h2><span>各所原始结算周期已按比例归一为 8H；净年化扣除开平仓四腿成本</span></div>
         <div className="table-actions"><select aria-label="筛选交易所" value={exchangeFilter} onChange={(event) => setExchangeFilter(event.target.value)}><option value="all">全部交易所</option>{data?.health.map((item) => <option key={item.exchange} value={item.exchange}>{EXCHANGE_CN[item.exchange]} · {item.ok ? `${item.quoteCount} 对` : "不可用"}</option>)}</select><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索币种" /><button className={onlyReady ? "active" : ""} onClick={() => setOnlyReady(!onlyReady)}>仅看达标</button><span className="row-count">{rows.length} 条</span></div>
       </div>
       <div className="table-scroll">
         <table>
-          <thead><tr><th>合约</th><th>双腿路径</th><th>8h 费率差</th><th>成本后 APR</th><th>预计回本</th><th>较弱侧流动性</th><th>评估</th><th /></tr></thead>
+          <thead><tr><th>合约</th><th>双腿路径</th><th>8H 费率差</th><th>成本后 APR</th><th>覆盖交易成本</th><th>较弱侧流动性</th><th>评估</th><th /></tr></thead>
           <tbody>{rows.slice(0, 60).map((item) => <tr key={`${item.symbol}-${item.longExchange}-${item.shortExchange}`}>
             <td><strong className="symbol">{item.symbol}</strong><small>{item.longQuoteAsset === item.shortQuoteAsset ? item.longQuoteAsset : `${item.longQuoteAsset}/${item.shortQuoteAsset}`} 永续</small></td>
             <td><div className="route"><span><ExchangeBadge name={item.longExchange} />{EXCHANGE_CN[item.longExchange]} <b className="long"><ArrowUpRight size={15} />做多</b></span><span><ExchangeBadge name={item.shortExchange} />{EXCHANGE_CN[item.shortExchange]} <b className="short"><ArrowDownLeft size={15} />做空</b></span></div></td>
@@ -71,6 +71,49 @@ function OpportunityTable({ data, onTrade }: { data: ScanResponse | null; onTrad
       </div>
     </section>
   );
+}
+
+function SpotPerpTable({ data }: { data: ScanResponse | null }) {
+  const [search, setSearch] = useState("");
+  const [direction, setDirection] = useState("all");
+  const rows = useMemo(() => (data?.spotPerpOpportunities ?? []).filter((item) =>
+    (!search || item.symbol.includes(search.toUpperCase())) && (direction === "all" || item.direction === direction),
+  ), [data, direction, search]);
+  return <section className="panel opportunity-panel">
+    <div className="panel-heading">
+      <div><p className="kicker">单账户策略</p><h2>同所现货 + 永续</h2><span>已接入币安、OKX、Bybit、Bitget、Gate.io 现货行情；执行链路尚未开放</span></div>
+      <div className="table-actions"><select aria-label="筛选现货永续方向" value={direction} onChange={(event) => setDirection(event.target.value)}><option value="all">全部方向</option><option value="long_spot_short_perp">正费率 · 现货多/永续空</option><option value="long_perp_short_spot">负费率 · 永续多/融币空现货</option></select><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索币种" /><span className="row-count">{rows.length} 条</span></div>
+    </div>
+    <div className="spot-direction-note"><strong>方向规则</strong><span>正费率：做多现货 + 做空永续，收取资金费。</span><span>负费率：做多永续 + 融币做空现货；必须先扣实时融币利息。</span></div>
+    <div className="table-scroll"><table>
+      <thead><tr><th>币种</th><th>同所路径</th><th>8H 资金费率</th><th>现货/永续基差</th><th>成本后 APR</th><th>覆盖交易成本</th><th>较弱侧流动性</th><th>评估</th><th /></tr></thead>
+      <tbody>{rows.slice(0, 60).map((item: SpotPerpOpportunity) => <tr key={`${item.exchange}-${item.symbol}`}>
+        <td><strong className="symbol">{item.symbol}</strong><small>{item.quoteAsset} 现货/永续</small></td>
+        <td><div className="route"><span><ExchangeBadge name={item.exchange} />{EXCHANGE_CN[item.exchange]} <b className={item.direction === "long_spot_short_perp" ? "long" : "short"}>{item.direction === "long_spot_short_perp" ? "现货多" : "融币空现货"}</b></span><span><ExchangeBadge name={item.exchange} />{EXCHANGE_CN[item.exchange]} <b className={item.direction === "long_spot_short_perp" ? "short" : "long"}>{item.direction === "long_spot_short_perp" ? "永续空" : "永续多"}</b></span></div></td>
+        <td className="number"><strong>{rate(item.fundingRate8h)}</strong><small>毛 APR {pct(item.grossApr, 1)}</small></td>
+        <td className="number"><strong>{pct(item.basisRate, 2)}</strong><small>永续相对现货</small></td>
+        <td className="number"><strong className={item.expectedNetApr !== null && item.expectedNetApr >= 0.12 ? "red" : ""}>{item.expectedNetApr === null ? "待扣融币利息" : pct(item.expectedNetApr, 1)}</strong><small>{item.expectedNetApr === null ? "当前不可判断净收益" : `持有 ${data?.params.holdingPeriods ?? 21} 期`}</small></td>
+        <td className="number">{item.minHoldingPeriods === null ? "待借币利率" : `${item.minHoldingPeriods} 期`}<small>{item.minHoldingPeriods === null ? "不能只看资金费" : `约 ${Math.ceil(item.minHoldingPeriods / 3)} 天`}</small></td>
+        <td className="number">{money(item.liquidityUsd)}</td>
+        <td><span className={`result-tag ${item.meetsThresholds ? "qualified" : "watch"}`}>{item.meetsThresholds ? "模型达标" : item.direction === "long_perp_short_spot" ? "需融币" : "观察"}</span></td>
+        <td><button className="row-action" disabled title="待补齐现货订单、余额和融币成本对账">执行待接入</button></td>
+      </tr>)}</tbody>
+    </table>{rows.length === 0 && <div className="empty-state">当前没有同所现货与永续配对数据。</div>}</div>
+  </section>;
+}
+
+function OpportunityWorkspace({ data, onTrade }: { data: ScanResponse | null; onTrade: (item: Opportunity) => void }) {
+  const [strategy, setStrategy] = useState<"cross" | "spot">("cross");
+  return <>
+    <section className="calculation-guide" aria-label="指标口径说明">
+      <article><strong>8H 归一化</strong><span>原始费率 × 8 ÷ 实际周期；1H、4H 只做等比例换算，不代表一定维持 8 小时。</span></article>
+      <article><strong>计划持有 21 期</strong><span>21 个归一化 8H 周期 = 7 天，用于摊销一次开平仓成本，不是历史连续 21 期。</span></article>
+      <article><strong>成本后 APR</strong><span>（每期费率差 − 四腿总成本 ÷ 计划期数）× 1,095，仅是静态年化估算。</span></article>
+      <article><strong>覆盖交易成本</strong><span>累计资金费覆盖两倍预计开平仓成本所需时间；不是本金翻倍。</span></article>
+    </section>
+    <div className="strategy-tabs" role="tablist" aria-label="套利策略"><button role="tab" aria-selected={strategy === "cross"} className={strategy === "cross" ? "active" : ""} onClick={() => setStrategy("cross")}>跨所双永续</button><button role="tab" aria-selected={strategy === "spot"} className={strategy === "spot" ? "active" : ""} onClick={() => setStrategy("spot")}>同所现货 + 永续 <small>{data?.spotExchangeCount ?? 0} 家</small></button></div>
+    {strategy === "cross" ? <OpportunityTable data={data} onTrade={onTrade} /> : <SpotPerpTable data={data} />}
+  </>;
 }
 
 function AccessGate({ error }: { error: string }) {
@@ -196,7 +239,7 @@ export default function App() {
   return <div className="app-shell"><a className="skip-link" href="#main">跳到主要内容</a><header><div className="header-inner"><button className="brand" onClick={() => setView("overview")}><span className="brand-seal">利</span><span><strong>FundArb</strong><small>跨所套利交易终端</small></span></button><nav>{[["overview", "总览"], ["opportunities", "套利机会"], ["trade", "双腿交易"], ["connections", "账户连接"], ["risk", "风控中心"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key as View)}>{label}</button>)}</nav><div className="header-tools"><span className={`market-state ${data?.healthySourceCount ? "online" : ""}`}><i />{data?.healthySourceCount ?? 0}/{data?.sourceCount ?? 9} 数据源</span><button className="icon-button" aria-label="刷新" onClick={() => void loadScan()}><RefreshCw size={19} className={loading ? "spin" : ""} /></button>{status ? <button className="operator-button" onClick={logout} title={status.identityEmail}><LogOut size={17} />{status.authenticationMethod === "cloudflare-access" ? "退出邮箱登录" : "退出应急会话"}</button> : <button className="operator-button" onClick={() => setView("connections")}><KeyRound size={17} />Google 邮箱登录</button>}</div></div></header>
     <main id="main" className="main-container">{publicError && <div className="banner danger"><XCircle size={20} />{publicError}</div>}
       {view === "overview" && <Overview data={data} status={status} setView={setView} />}
-      {view === "opportunities" && <><div className="page-heading"><div><p className="kicker">资金费率扫描</p><h1>套利机会</h1><p>观察值不是下单指令。进入交易前还需核对盘口深度、账户余额与保证金安全垫。</p></div><button className="icon-button large" onClick={() => void loadScan()}><RefreshCw size={21} className={loading ? "spin" : ""} /></button></div><section className="filter-panel"><div><SlidersHorizontal size={20} /><strong>收益假设</strong></div><label>单腿手续费 <b>{draft.feeBps} bp</b><input type="range" min="0" max="15" step="0.5" value={draft.feeBps} onChange={(e) => setDraft({ ...draft, feeBps: Number(e.target.value) })} /></label><label>单腿滑点 <b>{draft.slippageBps} bp</b><input type="range" min="0" max="20" step="0.5" value={draft.slippageBps} onChange={(e) => setDraft({ ...draft, slippageBps: Number(e.target.value) })} /></label><label>计划持有 <b>{draft.periods} 期</b><input type="range" min="3" max="90" step="3" value={draft.periods} onChange={(e) => setDraft({ ...draft, periods: Number(e.target.value) })} /></label><label>最低净 APR <b>{draft.minApr}%</b><input type="range" min="0" max="50" value={draft.minApr} onChange={(e) => setDraft({ ...draft, minApr: Number(e.target.value) })} /></label><button className="primary-button" onClick={() => setFilters(draft)}>重新计算</button></section><OpportunityTable data={data} onTrade={openTrade} /></>}
+      {view === "opportunities" && <><div className="page-heading"><div><p className="kicker">资金费率扫描</p><h1>套利机会</h1><p>观察值不是下单指令。进入交易前还需核对盘口深度、账户余额与保证金安全垫。</p></div><button className="icon-button large" onClick={() => void loadScan()}><RefreshCw size={21} className={loading ? "spin" : ""} /></button></div><section className="filter-panel"><div><SlidersHorizontal size={20} /><strong>收益假设</strong></div><label>单腿手续费 <b>{draft.feeBps} bp</b><input type="range" min="0" max="15" step="0.5" value={draft.feeBps} onChange={(e) => setDraft({ ...draft, feeBps: Number(e.target.value) })} /></label><label>单腿滑点 <b>{draft.slippageBps} bp</b><input type="range" min="0" max="20" step="0.5" value={draft.slippageBps} onChange={(e) => setDraft({ ...draft, slippageBps: Number(e.target.value) })} /></label><label>计划持有 <b>{draft.periods} 期</b><input type="range" min="3" max="90" step="3" value={draft.periods} onChange={(e) => setDraft({ ...draft, periods: Number(e.target.value) })} /></label><label>最低净 APR <b>{draft.minApr}%</b><input type="range" min="0" max="50" value={draft.minApr} onChange={(e) => setDraft({ ...draft, minApr: Number(e.target.value) })} /></label><button className="primary-button" onClick={() => setFilters(draft)}>重新计算</button></section><OpportunityWorkspace data={data} onTrade={openTrade} /></>}
       {protectedView && !status && <AccessGate error={adminError} />}
       {view === "connections" && status && <ConnectionsView status={status} request={adminRequest} refresh={refreshStatus} />}
       {view === "trade" && status && <TradeView status={status} selected={selectedOpportunity} request={adminRequest} refresh={refreshStatus} />}

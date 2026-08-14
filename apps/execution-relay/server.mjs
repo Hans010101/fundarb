@@ -11,15 +11,16 @@ const REQUEST_TTL_MS = 15_000;
 const seenRequestIds = new Map();
 
 const ALLOWLIST = new Map([
+  ["api.binance.com", new Map([["GET", ["/api/v3/ticker/24hr"]]])],
   ["fapi.binance.com", new Map([["POST", ["/fapi/v1/order"]], ["GET", ["/fapi/v3/account", "/fapi/v1/premiumIndex", "/fapi/v1/fundingInfo", "/fapi/v1/ticker/24hr"]]])],
   ["testnet.binancefuture.com", new Map([["POST", ["/fapi/v1/order"]], ["GET", ["/fapi/v3/account"]]])],
   ["api.bybit.com", new Map([["POST", ["/v5/order/create"]], ["GET", ["/v5/account/wallet-balance", "/v5/market/tickers"]]])],
   ["api-testnet.bybit.com", new Map([["POST", ["/v5/order/create"]], ["GET", ["/v5/account/wallet-balance"]]])],
   ["www.okx.com", new Map([["POST", ["/api/v5/trade/order"]], ["GET", ["/api/v5/account/balance", "/api/v5/market/tickers", "/api/v5/public/funding-rate"]]])],
-  ["api.bitget.com", new Map([["POST", ["/api/v2/mix/order/place-order"]], ["GET", ["/api/v2/mix/account/accounts", "/api/v3/market/current-fund-rate", "/api/v3/market/tickers"]]])],
+  ["api.bitget.com", new Map([["POST", ["/api/v2/mix/order/place-order"]], ["GET", ["/api/v2/mix/account/accounts", "/api/v3/market/current-fund-rate", "/api/v3/market/tickers", "/api/v2/spot/market/tickers"]]])],
   ["api.hyperliquid.xyz", new Map([["POST", ["/info", "/exchange"]]])],
   ["api.hyperliquid-testnet.xyz", new Map([["POST", ["/info", "/exchange"]]])],
-  ["api.gateio.ws", new Map([["POST", ["/api/v4/futures/usdt/orders"]], ["GET", ["/api/v4/futures/usdt/accounts", "/api/v4/futures/usdt/contracts", "/api/v4/futures/usdt/tickers"]]])],
+  ["api.gateio.ws", new Map([["POST", ["/api/v4/futures/usdt/orders"]], ["GET", ["/api/v4/futures/usdt/accounts", "/api/v4/futures/usdt/contracts", "/api/v4/futures/usdt/tickers", "/api/v4/spot/tickers"]]])],
   ["fx-api-testnet.gateio.ws", new Map([["POST", ["/api/v4/futures/usdt/orders"]], ["GET", ["/api/v4/futures/usdt/accounts"]]])],
   ["api-contract.weex.com", new Map([["POST", ["/capi/v3/order", "/capi/v3/sim/order"]], ["GET", ["/capi/v3/account/balance", "/capi/v3/sim/balance", "/capi/v2/market/currentFundRate", "/capi/v2/market/tickers"]]])],
   ["api.hbdm.com", new Map([["POST", ["/linear-swap-api/v1/swap_order", "/linear-swap-api/v1/swap_account_info"]], ["GET", ["/linear-swap-api/v1/swap_batch_funding_rate", "/linear-swap-api/v1/swap_contract_info", "/v2/linear-swap-ex/market/detail/batch_merged"]]])],

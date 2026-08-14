@@ -1,4 +1,4 @@
-import { buildOpportunities } from "../src/lib/funding";
+import { buildOpportunities, buildSpotPerpOpportunities } from "../src/lib/funding";
 import type { ScanParameters, ScanResponse } from "../src/lib/types";
 import { handleControlPlane } from "./control-plane";
 import { fetchAllExchanges } from "./exchanges";
@@ -44,7 +44,7 @@ async function scan(request: Request, env: Env): Promise<Response> {
 
   const params = parameters(url);
   const relayTransport = await resolveRelayTransport(env);
-  const { quotes, health } = await fetchAllExchanges(relayTransport);
+  const { quotes, spotQuotes, health } = await fetchAllExchanges(relayTransport);
   const exchangeCounts = new Map<string, number>();
   for (const item of quotes) exchangeCounts.set(item.symbol, (exchangeCounts.get(item.symbol) ?? 0) + 1);
   const warnings = [
@@ -58,10 +58,13 @@ async function scan(request: Request, env: Env): Promise<Response> {
     mode: "trading-terminal",
     params,
     opportunities: buildOpportunities(quotes, params),
+    spotPerpOpportunities: buildSpotPerpOpportunities(quotes, spotQuotes, params),
     health,
     sourceCount: health.length,
     healthySourceCount: health.filter((entry) => entry.ok).length,
     quoteCount: quotes.length,
+    spotQuoteCount: spotQuotes.length,
+    spotExchangeCount: new Set(spotQuotes.map((item) => item.exchange)).size,
     commonSymbolCount: [...exchangeCounts.values()].filter((count) => count >= 2).length,
     warnings,
   };

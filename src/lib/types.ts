@@ -22,6 +22,14 @@ export interface FundingQuote {
   intervalSource: "exchange_api" | "protocol_rule";
 }
 
+export interface SpotQuote {
+  exchange: ExchangeName;
+  symbol: string;
+  quoteAsset: "USDT" | "USDC";
+  price: number;
+  volume24h: number | null;
+}
+
 export interface ExchangeHealth {
   exchange: ExchangeName;
   ok: boolean;
@@ -53,6 +61,26 @@ export interface Opportunity {
   nextFundingTime: number | null;
 }
 
+export interface SpotPerpOpportunity {
+  rank: number;
+  exchange: ExchangeName;
+  symbol: string;
+  quoteAsset: "USDT" | "USDC";
+  direction: "long_spot_short_perp" | "long_perp_short_spot";
+  fundingRate8h: number;
+  grossApr: number;
+  expectedNetApr: number | null;
+  minHoldingPeriods: number | null;
+  estimatedRoundTripCost: number;
+  spotPrice: number;
+  perpMarkPrice: number;
+  basisRate: number;
+  liquidityUsd: number | null;
+  meetsThresholds: boolean;
+  reasons: string[];
+  nextFundingTime: number | null;
+}
+
 export interface ScanParameters {
   feeBpsPerLeg: number;
   slippageBpsPerLeg: number;
@@ -69,10 +97,13 @@ export interface ScanResponse {
   mode: "trading-terminal";
   params: ScanParameters;
   opportunities: Opportunity[];
+  spotPerpOpportunities: SpotPerpOpportunity[];
   health: ExchangeHealth[];
   sourceCount: number;
   healthySourceCount: number;
   quoteCount: number;
+  spotQuoteCount: number;
+  spotExchangeCount: number;
   commonSymbolCount: number;
   warnings: string[];
 }

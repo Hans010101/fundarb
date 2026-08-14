@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { basisPnl, buildOpportunities, estimateRoundTripCost, expectedNetApr, minHoldingPeriods, normalizeFunding, toApr } from "../src/lib/funding";
-import type { FundingQuote, ScanParameters } from "../src/lib/types";
+import { basisPnl, buildOpportunities, buildSpotPerpOpportunities, estimateRoundTripCost, expectedNetApr, minHoldingPeriods, normalizeFunding, toApr } from "../src/lib/funding";
+import type { FundingQuote, ScanParameters, SpotQuote } from "../src/lib/types";
 
 describe("funding model", () => {
   it("normalizes 1h, 4h and 8h rates to 8h", () => {
@@ -78,5 +78,19 @@ describe("opportunity builder", () => {
     const [result] = buildOpportunities([usdt, usdc], params);
     expect(result.executable).toBe(false);
     expect(result.reasons).toContain("结算币不同（USDT/USDC），禁止自动交易");
+  });
+});
+
+describe("spot and perpetual builder", () => {
+  const params: ScanParameters = { feeBpsPerLeg: 0, slippageBpsPerLeg: 0, safetyFactor: 2, holdingPeriods: 21, maxHoldingPeriods: 21, minEntryApr: 0.12, minVolumeUsd: 50_000_000 };
+  const spot: SpotQuote = { exchange: "Binance", symbol: "BTC", quoteAsset: "USDT", price: 100, volume24h: 1_000_000_000 };
+  const perp = (rate8h: number): FundingQuote => ({ exchange: "Binance", symbol: "BTC", quoteAsset: "USDT", rate: rate8h, intervalHours: 8, rate8h, markPrice: 100, volume24h: 1_000_000_000, nextFundingTime: 2_000_000_000_000, intervalSource: "exchange_api" });
+
+  it("uses long spot and short perpetual when funding is positive", () => {
+    expect(buildSpotPerpOpportunities([perp(0.0002)], [spot], params)[0]).toMatchObject({ direction: "long_spot_short_perp", meetsThresholds: true });
+  });
+
+  it("requires borrow cost before judging negative-funding carry", () => {
+    expect(buildSpotPerpOpportunities([perp(-0.0002)], [spot], params)[0]).toMatchObject({ direction: "long_perp_short_spot", expectedNetApr: null, minHoldingPeriods: null, meetsThresholds: false });
   });
 });

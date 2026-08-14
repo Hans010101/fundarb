@@ -40,6 +40,16 @@ test("accepts only explicitly allowlisted public market-data paths", () => {
   assert.throws(() => validateForwardRequest({ ...valid, method: "GET", url: "https://fapi.binance.com/fapi/v1/openInterest", body: null }), /白名单/);
 });
 
+test("accepts the five spot ticker feeds", () => {
+  for (const [exchange, url] of [
+    ["Binance", "https://api.binance.com/api/v3/ticker/24hr"],
+    ["OKX", "https://www.okx.com/api/v5/market/tickers?instType=SPOT"],
+    ["Bybit", "https://api.bybit.com/v5/market/tickers?category=spot"],
+    ["Bitget", "https://api.bitget.com/api/v2/spot/market/tickers"],
+    ["Gate.io", "https://api.gateio.ws/api/v4/spot/tickers"],
+  ]) assert.equal(validateForwardRequest({ ...valid, exchange, method: "GET", url, body: null, headers: { accept: "application/json" } }).target.protocol, "https:");
+});
+
 test("accepts current Binance futures account V3 and rejects retired V2", () => {
   const account = validateForwardRequest({ ...valid, exchange: "Binance", method: "GET", url: "https://fapi.binance.com/fapi/v3/account?timestamp=1", body: null, headers: { "X-MBX-APIKEY": "key" } });
   assert.equal(account.target.pathname, "/fapi/v3/account");

@@ -1,4 +1,4 @@
-import type { FundingQuote, Opportunity, ScanParameters } from "./types";
+import type { FundingQuote, Opportunity, ScanParameters, SpotPerpOpportunity, SpotQuote } from "./types";
 
 export const PERIODS_PER_YEAR_8H = 3 * 365;
 
@@ -62,7 +62,7 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
         );
         const liquidity = liquidityValues.length === 2 ? Math.min(...liquidityValues) : null;
         const reasons: string[] = [];
-        if (minPeriods > params.maxHoldingPeriods) reasons.push(`回本需 ${minPeriods} 期，超过上限`);
+        if (minPeriods > params.maxHoldingPeriods) reasons.push(`覆盖成本需 ${minPeriods} 期，超过上限`);
         if (netApr < params.minEntryApr) reasons.push("成本后年化低于门槛");
         if (grossApr > 1) reasons.push("极端费率：需历史稳定性与盘口复核");
         if (longQuote.quoteAsset !== shortQuote.quoteAsset) reasons.push(`结算币不同（${longQuote.quoteAsset}/${shortQuote.quoteAsset}），禁止自动交易`);
@@ -108,4 +108,39 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
     .sort((a, b) => Number(b.executable) - Number(a.executable) || b.expectedNetApr - a.expectedNetApr)
     .slice(0, 300)
     .map((item, index) => ({ ...item, rank: index + 1 }));
+}
+
+export function buildSpotPerpOpportunities(perps: FundingQuote[], spots: SpotQuote[], params: ScanParameters): SpotPerpOpportunity[] {
+  const spotMap = new Map(spots.map((item) => [`${item.exchange}:${item.symbol}:${item.quoteAsset}`, item]));
+  const totalCost = estimateRoundTripCost(params.feeBpsPerLeg, params.slippageBpsPerLeg);
+  const output = perps.flatMap((perp): SpotPerpOpportunity[] => {
+    const spot = spotMap.get(`${perp.exchange}:${perp.symbol}:${perp.quoteAsset}`);
+    if (!spot || !perp.markPrice || perp.rate8h === 0) return [];
+    const basisRate = (perp.markPrice - spot.price) / spot.price;
+    if (Math.abs(basisRate) > 0.2) return [];
+    const grossRate = Math.abs(perp.rate8h);
+    const positiveFunding = perp.rate8h > 0;
+    const minPeriods = positiveFunding ? minHoldingPeriods(grossRate, totalCost, params.safetyFactor) : null;
+    const netApr = positiveFunding ? expectedNetApr(grossRate, totalCost, params.holdingPeriods) : null;
+    const liquidity = perp.volume24h && spot.volume24h ? Math.min(perp.volume24h, spot.volume24h) : null;
+    const reasons: string[] = [];
+    if (!positiveFunding) reasons.push("需实时融币利率，暂只观察");
+    if (positiveFunding && minPeriods! > params.maxHoldingPeriods) reasons.push(`覆盖成本需 ${minPeriods} 期，超过上限`);
+    if (positiveFunding && netApr! < params.minEntryApr) reasons.push("成本后年化低于门槛");
+    if (grossRate > 0.01) reasons.push("极端费率：需历史稳定性与盘口复核");
+    if (Math.abs(basisRate) > 0.03) reasons.push("现货与永续基差过大");
+    if (liquidity === null) reasons.push("缺少双边 24h 流动性数据");
+    else if (liquidity < params.minVolumeUsd) reasons.push("双边流动性低于门槛");
+    return [{
+      rank: 0, exchange: perp.exchange, symbol: perp.symbol, quoteAsset: perp.quoteAsset,
+      direction: positiveFunding ? "long_spot_short_perp" : "long_perp_short_spot",
+      fundingRate8h: perp.rate8h, grossApr: toApr(grossRate), expectedNetApr: netApr,
+      minHoldingPeriods: minPeriods, estimatedRoundTripCost: totalCost, spotPrice: spot.price,
+      perpMarkPrice: perp.markPrice, basisRate, liquidityUsd: liquidity,
+      meetsThresholds: positiveFunding && reasons.length === 0, reasons, nextFundingTime: perp.nextFundingTime,
+    }];
+  });
+  const ranked = (direction: SpotPerpOpportunity["direction"]) => output.filter((item) => item.direction === direction)
+    .sort((a, b) => Number(b.meetsThresholds) - Number(a.meetsThresholds) || b.grossApr - a.grossApr).slice(0, 150);
+  return [...ranked("long_spot_short_perp"), ...ranked("long_perp_short_spot")].map((item, index) => ({ ...item, rank: index + 1 }));
 }
