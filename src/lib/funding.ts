@@ -20,7 +20,8 @@ export function estimateRoundTripCost(feeBpsPerLeg: number, slippageBpsPerLeg: n
 
 export function minHoldingPeriods(spread8h: number, totalCost: number, safetyFactor: number): number {
   if (spread8h <= 0) return Number.POSITIVE_INFINITY;
-  return Math.max(1, Math.ceil((totalCost * safetyFactor) / spread8h));
+  const periods = (totalCost * safetyFactor) / spread8h;
+  return Math.max(1, Math.ceil(periods - 1e-12));
 }
 
 export function expectedNetApr(spread8h: number, totalCost: number, holdingPeriods: number): number {
@@ -55,14 +56,15 @@ export function buildOpportunities(quotes: FundingQuote[], params: ScanParameter
         const spread = shortQuote.rate8h - longQuote.rate8h;
         if (spread <= 0) continue;
         const grossApr = toApr(spread);
-        const minPeriods = minHoldingPeriods(spread, totalCost, params.safetyFactor);
+        const minPeriods = minHoldingPeriods(spread, totalCost, 1);
+        const safetyPeriods = minHoldingPeriods(spread, totalCost, params.safetyFactor);
         const netApr = expectedNetApr(spread, totalCost, params.holdingPeriods);
         const liquidityValues = [quoteLiquidity(longQuote), quoteLiquidity(shortQuote)].filter(
           (value): value is number => value !== null,
         );
         const liquidity = liquidityValues.length === 2 ? Math.min(...liquidityValues) : null;
         const reasons: string[] = [];
-        if (minPeriods > params.maxHoldingPeriods) reasons.push(`覆盖成本需 ${minPeriods} 期，超过上限`);
+        if (safetyPeriods > params.maxHoldingPeriods) reasons.push(`${params.safetyFactor} 倍安全边际需 ${safetyPeriods} 期，超过上限`);
         if (netApr < params.minEntryApr) reasons.push("成本后年化低于门槛");
         if (grossApr > 1) reasons.push("极端费率：需历史稳定性与盘口复核");
         if (longQuote.quoteAsset !== shortQuote.quoteAsset) reasons.push(`结算币不同（${longQuote.quoteAsset}/${shortQuote.quoteAsset}），禁止自动交易`);
@@ -120,12 +122,13 @@ export function buildSpotPerpOpportunities(perps: FundingQuote[], spots: SpotQuo
     if (Math.abs(basisRate) > 0.2) return [];
     const grossRate = Math.abs(perp.rate8h);
     const positiveFunding = perp.rate8h > 0;
-    const minPeriods = positiveFunding ? minHoldingPeriods(grossRate, totalCost, params.safetyFactor) : null;
+    const minPeriods = positiveFunding ? minHoldingPeriods(grossRate, totalCost, 1) : null;
+    const safetyPeriods = positiveFunding ? minHoldingPeriods(grossRate, totalCost, params.safetyFactor) : null;
     const netApr = positiveFunding ? expectedNetApr(grossRate, totalCost, params.holdingPeriods) : null;
     const liquidity = perp.volume24h && spot.volume24h ? Math.min(perp.volume24h, spot.volume24h) : null;
     const reasons: string[] = [];
     if (!positiveFunding) reasons.push("需实时融币利率，暂只观察");
-    if (positiveFunding && minPeriods! > params.maxHoldingPeriods) reasons.push(`覆盖成本需 ${minPeriods} 期，超过上限`);
+    if (positiveFunding && safetyPeriods! > params.maxHoldingPeriods) reasons.push(`${params.safetyFactor} 倍安全边际需 ${safetyPeriods} 期，超过上限`);
     if (positiveFunding && netApr! < params.minEntryApr) reasons.push("成本后年化低于门槛");
     if (grossRate > 0.01) reasons.push("极端费率：需历史稳定性与盘口复核");
     if (Math.abs(basisRate) > 0.03) reasons.push("现货与永续基差过大");

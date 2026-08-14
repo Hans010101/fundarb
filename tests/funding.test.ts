@@ -21,6 +21,7 @@ describe("funding model", () => {
   });
 
   it("uses the safety factor for break-even periods", () => {
+    expect(minHoldingPeriods(0.0001, 0.0025, 1)).toBe(25);
     expect(minHoldingPeriods(0.0001, 0.0025, 2)).toBe(50);
     expect(minHoldingPeriods(0, 0.0025, 2)).toBe(Number.POSITIVE_INFINITY);
   });
@@ -45,6 +46,14 @@ describe("opportunity builder", () => {
     const result = buildOpportunities([makeQuote("Bybit", -0.0001), makeQuote("Bitget", 0.0002)], params);
     expect(result[0]).toMatchObject({ longExchange: "Bybit", shortExchange: "Bitget", executable: true });
     expect(result[0].spread8h).toBeCloseTo(0.0003, 12);
+  });
+
+  it("reports raw cost coverage while keeping the safety factor in qualification", () => {
+    const costs = { ...params, feeBpsPerLeg: 5.5, slippageBpsPerLeg: 2, maxHoldingPeriods: 5 };
+    const [result] = buildOpportunities([makeQuote("Bybit", -0.0003), makeQuote("Bitget", 0.0003)], costs);
+    expect(result.minHoldingPeriods).toBe(5);
+    expect(result.executable).toBe(false);
+    expect(result.reasons[0]).toContain("2 倍安全边际需 10 期");
   });
 
   it("flags insufficient liquidity", () => {
