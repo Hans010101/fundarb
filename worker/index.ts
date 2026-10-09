@@ -10,8 +10,8 @@ const DEFAULTS: ScanParameters = {
   feeBpsPerLeg: 5.5,
   slippageBpsPerLeg: 2,
   safetyFactor: 2,
-  holdingPeriods: 21,
-  maxHoldingPeriods: 21,
+  holdingPeriods: 3,
+  maxHoldingPeriods: 3,
   minEntryApr: 0.12,
   minVolumeUsd: 50_000_000,
 };
